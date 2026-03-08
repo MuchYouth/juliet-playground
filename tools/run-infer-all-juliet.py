@@ -2,6 +2,7 @@ from typing import Dict, Generator, List, Optional, Set, Tuple
 
 from paths import PROJECT_HOME, JULIET_TESTCASE_DIR, INFER_BIN, RESULT_DIR, GLOBAL_RESULT_DIR, PULSE_TAINT_CONFIG
 
+import concurrent.futures
 import csv
 import datetime
 import importlib.util
@@ -13,7 +14,10 @@ import subprocess
 import time
 import typer
 
-NUM_CORES = 20
+TOTAL_CORES = os.cpu_count() or 4
+MIN_CORES_PER_JOB = 2
+MAX_PARALLEL_JOBS = max(1, TOTAL_CORES // MIN_CORES_PER_JOB)
+CORES_PER_JOB = max(1, TOTAL_CORES // MAX_PARALLEL_JOBS)
 VALID_EXTENSIONS = {'c', 'cpp'}
 WINDOWS_SPECIFIC_MARKERS = ('w32', 'wchar_t')
 
@@ -103,7 +107,8 @@ def find_group_files(group_key: CaseGroup) -> List[str]:
     return sorted(matched_files)
 
 
-def build_infer_command(target_files: List[str], extension: str) -> str:
+def build_infer_command(target_files: List[str], extension: str,
+                        cores: int = CORES_PER_JOB) -> str:
     testcasesupport_dir = os.path.join(PROJECT_HOME, 'juliet-test-suite-v1.3',
                                        'C', 'testcasesupport')
     io_c = os.path.join(testcasesupport_dir, 'io.c')
@@ -116,26 +121,33 @@ def build_infer_command(target_files: List[str], extension: str) -> str:
         f'{compiler} -I {shlex.quote(testcasesupport_dir)} -D INCLUDEMAIN '
         f'{shlex.quote(io_c)} {quoted_files}{link_flag}'
     )
-    return f'{INFER_BIN} run -j {NUM_CORES} --pulse-taint-config {PULSE_TAINT_CONFIG} -- {compile_cmd}'
+    return f'{INFER_BIN} run -j {cores} --pulse-taint-config {PULSE_TAINT_CONFIG} -- {compile_cmd}'
 
 
-def run_case(result_path: str, infer_cmd: str, representative_file: str,
-             summary: Dict[str, object], executed_cases: List[int]) -> None:
+def run_case(result_path: str, infer_cmd: str,
+             representative_file: str) -> Dict[str, object]:
+    """Run a single infer case. Returns a result dict (thread/process safe)."""
     os.makedirs(result_path, exist_ok=True)
-    previous_cwd = os.getcwd()
     try:
-        os.chdir(result_path)
-        executed_cases[0] += 1
-        result = subprocess.check_output(infer_cmd, shell=True)
+        result = subprocess.check_output(
+            infer_cmd, shell=True, cwd=result_path,
+            stderr=subprocess.DEVNULL)
         if b'No issues found' in result:
-            summary['no_issue'] += 1
-            summary['no_issue_files'].append(representative_file)
+            return {'status': 'no_issue', 'file': representative_file}
         else:
-            summary['issue'] += 1
+            return {'status': 'issue', 'file': representative_file}
     except subprocess.CalledProcessError:
-        summary['error'] += 1
-    finally:
-        os.chdir(previous_cwd)
+        return {'status': 'error', 'file': representative_file}
+
+
+def _collect_results(futures: List, summary: Dict[str, object]) -> None:
+    """Aggregate results from completed futures into summary."""
+    for future in concurrent.futures.as_completed(futures):
+        res = future.result()
+        status = res['status']
+        summary[status] += 1
+        if status == 'no_issue':
+            summary['no_issue_files'].append(res['file'])
 
 
 def run_infer_all(cwe_dir,
@@ -156,25 +168,33 @@ def run_infer_all(cwe_dir,
     }
     start_time = time.time()
     target_dir = os.path.join(JULIET_TESTCASE_DIR, cwe_dir)
-    for file_path in iter_candidate_files(target_dir):
-        if max_cases is not None and executed_cases[0] >= max_cases:
-            break
 
-        parsed = parse_case_group(file_path)
-        if parsed is None:
-            continue
+    futures = []
+    with concurrent.futures.ProcessPoolExecutor(
+            max_workers=MAX_PARALLEL_JOBS) as executor:
+        for file_path in iter_candidate_files(target_dir):
+            if max_cases is not None and executed_cases[0] >= max_cases:
+                break
 
-        group_key, cwe_num, filename_head, filename_num, extension = parsed
-        if group_key in processed_groups:
-            continue
+            parsed = parse_case_group(file_path)
+            if parsed is None:
+                continue
 
-        processed_groups.add(group_key)
-        result_path = os.path.join(result_dir, f'{cwe_num}_{filename_num}-{filename_head}')
-        target_files = find_group_files(group_key)
-        if not target_files:
-            continue
-        infer_cmd = build_infer_command(target_files, extension)
-        run_case(result_path, infer_cmd, file_path, summary, executed_cases)
+            group_key, cwe_num, filename_head, filename_num, extension = parsed
+            if group_key in processed_groups:
+                continue
+
+            processed_groups.add(group_key)
+            result_path = os.path.join(result_dir, f'{cwe_num}_{filename_num}-{filename_head}')
+            target_files = find_group_files(group_key)
+            if not target_files:
+                continue
+            infer_cmd = build_infer_command(target_files, extension)
+            futures.append(
+                executor.submit(run_case, result_path, infer_cmd, file_path))
+            executed_cases[0] += 1
+
+        _collect_results(futures, summary)
 
     summary['time'] = time.time() - start_time
     return summary
@@ -192,46 +212,53 @@ def run_infer_for_files(files: List[str], result_dir: str,
     executed_cases = [0]
     processed_targets: Set[Tuple[str, ...]] = set()
 
-    for file_path in files:
-        if max_cases is not None and executed_cases[0] >= max_cases:
-            break
+    futures = []
+    with concurrent.futures.ProcessPoolExecutor(
+            max_workers=MAX_PARALLEL_JOBS) as executor:
+        for file_path in files:
+            if max_cases is not None and executed_cases[0] >= max_cases:
+                break
 
-        abs_file = os.path.abspath(file_path)
-        if not os.path.isfile(abs_file):
-            raise typer.BadParameter(f'File not found: {file_path}')
+            abs_file = os.path.abspath(file_path)
+            if not os.path.isfile(abs_file):
+                raise typer.BadParameter(f'File not found: {file_path}')
 
-        filename = os.path.basename(abs_file)
-        if '.' not in filename:
-            raise typer.BadParameter(f'Invalid file (no extension): {file_path}')
+            filename = os.path.basename(abs_file)
+            if '.' not in filename:
+                raise typer.BadParameter(f'Invalid file (no extension): {file_path}')
 
-        name_without_ext, extension = filename.rsplit('.', 1)
-        if extension not in VALID_EXTENSIONS:
-            raise typer.BadParameter(f'Unsupported extension for file: {file_path}')
+            name_without_ext, extension = filename.rsplit('.', 1)
+            if extension not in VALID_EXTENSIONS:
+                raise typer.BadParameter(f'Unsupported extension for file: {file_path}')
 
-        parsed = parse_case_group(abs_file)
-        if parsed is not None:
-            group_key, cwe_num, filename_head, filename_num, parsed_extension = parsed
-            if parsed_extension != extension:
-                raise typer.BadParameter(f'Extension mismatch in parsed testcase: {file_path}')
-            target_key = ('group',) + group_key
-            if target_key in processed_targets:
-                continue
-            processed_targets.add(target_key)
-            target_files = find_group_files(group_key)
-            if not target_files:
-                raise typer.BadParameter(f'No grouped testcase files found for: {file_path}')
-            result_name = f'{cwe_num}_{filename_num}-{filename_head}'
-        else:
-            target_key = ('single', abs_file)
-            if target_key in processed_targets:
-                continue
-            processed_targets.add(target_key)
-            target_files = [abs_file]
-            result_name = f'FILE-{name_without_ext}'
+            parsed = parse_case_group(abs_file)
+            if parsed is not None:
+                group_key, cwe_num, filename_head, filename_num, parsed_extension = parsed
+                if parsed_extension != extension:
+                    raise typer.BadParameter(f'Extension mismatch in parsed testcase: {file_path}')
+                target_key = ('group',) + group_key
+                if target_key in processed_targets:
+                    continue
+                processed_targets.add(target_key)
+                target_files = find_group_files(group_key)
+                if not target_files:
+                    raise typer.BadParameter(f'No grouped testcase files found for: {file_path}')
+                result_name = f'{cwe_num}_{filename_num}-{filename_head}'
+            else:
+                target_key = ('single', abs_file)
+                if target_key in processed_targets:
+                    continue
+                processed_targets.add(target_key)
+                target_files = [abs_file]
+                result_name = f'FILE-{name_without_ext}'
 
-        result_path = os.path.join(result_dir, result_name)
-        infer_cmd = build_infer_command(target_files, extension)
-        run_case(result_path, infer_cmd, abs_file, summary, executed_cases)
+            result_path = os.path.join(result_dir, result_name)
+            infer_cmd = build_infer_command(target_files, extension)
+            futures.append(
+                executor.submit(run_case, result_path, infer_cmd, abs_file))
+            executed_cases[0] += 1
+
+        _collect_results(futures, summary)
 
     summary['time'] = time.time() - start_time
     return summary
