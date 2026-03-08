@@ -30,9 +30,10 @@ def run_infer(file_path, filename_head, filename_num, extension,
     file_path_prefix = file_path[:file_path_prefix_pos]
     target_file = os.path.join(file_path_prefix,
                                f'{filename_head}_{filename_num}*.{extension}')
-    link_flag = '-lc++abi -lstdc++ -lm'
+    compiler = 'clang++' if extension == 'cpp' else 'clang'
+    link_flag = ' -lm' if extension == 'cpp' else ''
 
-    compile_cmd = f'clang -I {testcasesupport_dir} -D INCLUDEMAIN {io_c} {target_file} {link_flag}'
+    compile_cmd = f'{compiler} -I {testcasesupport_dir} -D INCLUDEMAIN {io_c} {target_file}{link_flag}'
     infer_extra_parts = []
     for arg in infer_extra:
         split_once = arg.strip().split(None, 1)
@@ -50,9 +51,12 @@ def run_infer_all(cwe_dir,
                   result_dir,
                   infer_extra: List[str],
                   max_cases: Optional[int] = None,
-                  executed_cases: Optional[List[int]] = None):
+                  executed_cases: Optional[List[int]] = None,
+                  processed_groups: Optional[set] = None):
     if executed_cases is None:
         executed_cases = [0]
+    if processed_groups is None:
+        processed_groups = set()
 
     result_map = {'issue': 0, 'no_issue': 0, 'error': 0}
     no_issue_files = []
@@ -70,7 +74,8 @@ def run_infer_all(cwe_dir,
                                           result_dir,
                                           infer_extra,
                                           max_cases=max_cases,
-                                          executed_cases=executed_cases)
+                                          executed_cases=executed_cases,
+                                          processed_groups=processed_groups)
             result_map['issue'] += subdir_result['issue']
             result_map['no_issue'] += subdir_result['no_issue']
             result_map['error'] += subdir_result['error']
@@ -95,11 +100,15 @@ def run_infer_all(cwe_dir,
 
         try:
             if filename_suffix[-1].isalpha():
-                if filename_suffix[-1] != 'a':
-                    continue
                 filename_num = filename_suffix[:-1]
             else:
                 filename_num = filename_suffix
+
+            group_key = (file_path_prefix := os.path.dirname(file_path),
+                         filename_head, filename_num, extension)
+            if group_key in processed_groups:
+                continue
+            processed_groups.add(group_key)
 
             result_path = os.path.join(
                 result_dir, f'{cwe_num}_{filename_num}-{filename_head}')
