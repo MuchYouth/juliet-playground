@@ -1,4 +1,4 @@
-from typing import List, Optional
+from typing import Dict, Generator, List, Optional, Set, Tuple
 
 from paths import PROJECT_HOME, JULIET_TESTCASE_DIR, INFER_BIN, RESULT_DIR, GLOBAL_RESULT_DIR, PULSE_TAINT_CONFIG
 
@@ -9,17 +9,58 @@ import subprocess
 import time
 import typer
 
+NUM_CORES = 20
+VALID_EXTENSIONS = {'c', 'cpp'}
+WINDOWS_SPECIFIC_MARKERS = ('w32', 'wchar_t')
 
-def is_cwe_exist(cwe_number):
+
+CaseGroup = Tuple[str, str, str, str]  # (directory, head, number, extension)
+
+
+def find_cwe_dir(cwe_number: int) -> Optional[str]:
     prefix = f'CWE{cwe_number}_'
-    for d in os.listdir(JULIET_TESTCASE_DIR):
-        if d.startswith(prefix):
-            return d
+    for entry in os.listdir(JULIET_TESTCASE_DIR):
+        if entry.startswith(prefix):
+            return entry
     return None
 
 
-def run_infer(file_path, filename_head, filename_num, extension):
-    num_cores = 20
+def iter_candidate_files(target_dir: str) -> Generator[str, None, None]:
+    for entry in os.listdir(target_dir):
+        file_path = os.path.join(target_dir, entry)
+        if os.path.isdir(file_path):
+            yield from iter_candidate_files(file_path)
+            continue
+
+        if '.' not in entry or 'CWE' not in entry:
+            continue
+        if any(marker in entry for marker in WINDOWS_SPECIFIC_MARKERS):
+            continue
+
+        _, extension = entry.rsplit('.', 1)
+        if extension in VALID_EXTENSIONS:
+            yield file_path
+
+
+def parse_case_group(file_path: str) -> Optional[Tuple[CaseGroup, str, str, str, str]]:
+    filename = os.path.basename(file_path)
+    name_without_ext, extension = filename.rsplit('.', 1)
+
+    split_pos = name_without_ext.rfind('_')
+    if split_pos == -1:
+        return None
+
+    filename_head = name_without_ext[:split_pos]
+    cwe_num = filename_head[0:filename_head.find('_')]
+    filename_suffix = name_without_ext[split_pos + 1:]
+
+    filename_num = filename_suffix[:-1] if filename_suffix[-1].isalpha() else filename_suffix
+    group_key: CaseGroup = (os.path.dirname(file_path), filename_head, filename_num, extension)
+    return group_key, cwe_num, filename_head, filename_num, extension
+
+
+def build_infer_command(file_path: str, filename_head: str, filename_num: str,
+                        extension: str) -> str:
     testcasesupport_dir = os.path.join(PROJECT_HOME, 'juliet-test-suite-v1.3',
                                        'C', 'testcasesupport')
     io_c = os.path.join(testcasesupport_dir, 'io.c')
@@ -32,9 +73,7 @@ def run_infer(file_path, filename_head, filename_num, extension):
     link_flag = ' -lm' if extension == 'cpp' else ''
 
     compile_cmd = f'{compiler} -I {testcasesupport_dir} -D INCLUDEMAIN {io_c} {target_file}{link_flag}'
-    return subprocess.check_output(
-        f'{INFER_BIN} run -j {num_cores} --pulse-taint-config {PULSE_TAINT_CONFIG} -- {compile_cmd}',
-        shell=True)
+    return f'{INFER_BIN} run -j {NUM_CORES} --pulse-taint-config {PULSE_TAINT_CONFIG} -- {compile_cmd}'
 
 
 def run_infer_all(cwe_dir,
@@ -47,78 +86,49 @@ def run_infer_all(cwe_dir,
     if processed_groups is None:
         processed_groups = set()
 
-    result_map = {'issue': 0, 'no_issue': 0, 'error': 0}
-    no_issue_files = []
-
+    summary: Dict[str, object] = {
+        'issue': 0,
+        'no_issue': 0,
+        'error': 0,
+        'no_issue_files': []
+    }
     start_time = time.time()
-
     target_dir = os.path.join(JULIET_TESTCASE_DIR, cwe_dir)
-    for file in os.listdir(target_dir):
+    for file_path in iter_candidate_files(target_dir):
         if max_cases is not None and executed_cases[0] >= max_cases:
             break
 
-        file_path = os.path.join(target_dir, file)
-        if os.path.isdir(file_path):
-            subdir_result = run_infer_all(file_path,
-                                          result_dir,
-                                          max_cases=max_cases,
-                                          executed_cases=executed_cases,
-                                          processed_groups=processed_groups)
-            result_map['issue'] += subdir_result['issue']
-            result_map['no_issue'] += subdir_result['no_issue']
-            result_map['error'] += subdir_result['error']
-            no_issue_files += subdir_result['no_issue_files']
+        parsed = parse_case_group(file_path)
+        if parsed is None:
             continue
 
-        if '.' not in file or 'CWE' not in file:
+        group_key, cwe_num, filename_head, filename_num, extension = parsed
+        if group_key in processed_groups:
             continue
 
-        # windows-specific testcases
-        if 'w32' in file or 'wchar_t' in file:
-            continue
+        processed_groups.add(group_key)
+        result_path = os.path.join(result_dir, f'{cwe_num}_{filename_num}-{filename_head}')
+        os.makedirs(result_path, exist_ok=True)
 
-        filename, extension = file.rsplit('.', 1)
-        if not (extension == 'c' or extension == 'cpp'):
-            continue
-
-        split_pos = filename.rfind('_')
-        filename_head = filename[:split_pos]
-        cwe_num = filename_head[0:filename_head.find('_')]
-        filename_suffix = filename[split_pos + 1:]
-
+        previous_cwd = os.getcwd()
         try:
-            if filename_suffix[-1].isalpha():
-                filename_num = filename_suffix[:-1]
-            else:
-                filename_num = filename_suffix
-
-            group_key = (file_path_prefix := os.path.dirname(file_path),
-                         filename_head, filename_num, extension)
-            if group_key in processed_groups:
-                continue
-            processed_groups.add(group_key)
-
-            result_path = os.path.join(
-                result_dir, f'{cwe_num}_{filename_num}-{filename_head}')
-            os.makedirs(result_path, exist_ok=True)
             os.chdir(result_path)
             executed_cases[0] += 1
-            result = run_infer(file_path, filename_head, filename_num, extension)
-            os.chdir(result_dir)
-
+            infer_cmd = build_infer_command(file_path, filename_head, filename_num,
+                                            extension)
+            result = subprocess.check_output(infer_cmd, shell=True)
             if b'No issues found' in result:
-                no_issue_files.append(file_path)
-                result_map['no_issue'] += 1
+                summary['no_issue'] += 1
+                summary['no_issue_files'].append(file_path)
             else:
-                result_map['issue'] += 1
-
+                summary['issue'] += 1
         except subprocess.CalledProcessError:
-            result_map['error'] += 1
+            summary['error'] += 1
+        finally:
+            os.chdir(previous_cwd)
 
-    result_map['time'] = time.time() - start_time
-    result_map['no_issue_files'] = no_issue_files
-
-    return result_map
+    summary['time'] = time.time() - start_time
+    return summary
 
 
 def generate_result_csv(result_map, result_dir):
@@ -134,13 +144,13 @@ def generate_result_csv(result_map, result_dir):
         for cwe_number in result_map:
             cwe_number_info = result_map[cwe_number]
 
-            time = cwe_number_info['time']
+            elapsed_sec = cwe_number_info['time']
             issue = cwe_number_info['issue']
             no_issue = cwe_number_info['no_issue']
             error = cwe_number_info['error']
-            all = issue + no_issue + error
+            total_cases = issue + no_issue + error
 
-            writer.writerow([cwe_number, all, time, issue, no_issue, error])
+            writer.writerow([cwe_number, total_cases, elapsed_sec, issue, no_issue, error])
 
 
 def generate_no_issue_files(result_map, result_dir):
@@ -170,14 +180,14 @@ def main(cwes: List[int],
     juliet_result_dir = os.path.join(result_dir, f'juliet-result-{timestamp}')
     os.makedirs(juliet_result_dir, exist_ok=True)
 
-    result_map = {}
+    result_map: Dict[int, Dict[str, object]] = {}
     for cwe_number in cwes:
-        if (result := is_cwe_exist(cwe_number)) == None:
-            pass
-        else:
-            result_map[cwe_number] = run_infer_all(result,
-                                                   juliet_result_dir,
-                                                   max_cases=max_cases)
+        cwe_dir = find_cwe_dir(cwe_number)
+        if cwe_dir is None:
+            continue
+        result_map[cwe_number] = run_infer_all(cwe_dir,
+                                               juliet_result_dir,
+                                               max_cases=max_cases)
 
     if generate_csv:
         generate_result_csv(result_map, juliet_result_dir)
