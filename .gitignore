@@ -208,3 +208,5 @@ __marimo__/
 
 # User-defined ignore patterns
 juliet-result-*/
+signatures-result-*/
+artifacts/signatures/
