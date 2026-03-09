@@ -321,8 +321,6 @@ def load_signature_module():
 
 
 def main(cwes: Optional[List[int]] = typer.Argument(None),
-         generate_signature: bool = typer.Option(
-             False, help='Generate signatures after infer run'),
          global_result: bool = typer.Option(False),
          files: List[str] = typer.Option(
              [], '--files', help='Run infer for specific files (repeatable)'),
@@ -358,12 +356,11 @@ def main(cwes: Optional[List[int]] = typer.Argument(None),
     generate_result_csv(result_map, juliet_result_dir)
     generate_no_issue_files(result_map, juliet_result_dir)
 
-    if generate_signature:
-        signature_module = load_signature_module()
-        signature_output_dir = signature_module.generate_signatures(
-            input_dir=Path(juliet_result_dir),
-            output_root=Path(RESULT_DIR) / 'signatures')
-        print(f'Signatures generated at: {signature_output_dir}')
+    signature_module = load_signature_module()
+    signature_output_dir = signature_module.generate_signatures(
+        input_dir=Path(juliet_result_dir),
+        output_root=Path(RESULT_DIR) / 'signatures')
+    print(f'Signatures generated at: {signature_output_dir}')
 
 
 if __name__ == '__main__':

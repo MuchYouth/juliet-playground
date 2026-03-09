@@ -28,7 +28,7 @@ cd /home/sojeon/Desktop/juliet-playground && python3 -m venv .venv && source .ve
 ### 2) 바로 실행 (한 줄)
 
 ```bash
-source .venv/bin/activate && python tools/run-infer-all-juliet.py 78 --max-cases 3 --generate-signature
+source .venv/bin/activate && python tools/run-infer-all-juliet.py 78 --max-cases 3
 ```
 
 ## 결과 위치
@@ -53,6 +53,7 @@ artifacts/
 - **Infer 실행**: `tools/run-infer-all-juliet.py`
   - CWE 단위/파일 단위로 Juliet 테스트케이스를 실행
   - `issue / no_issue / error` 집계, `analysis/result.csv`, `analysis/no_issue_files.txt`를 항상 생성
+  - infer 실행 후 signature도 항상 생성
 - **Signature 생성**: `tools/generate-signature.py`
   - `infer-out/report.json`에서 `bug_trace`가 있는 이슈를 JSON으로 분리 저장
   - `analysis/signature_counts.csv`에 CWE별 통계 저장
