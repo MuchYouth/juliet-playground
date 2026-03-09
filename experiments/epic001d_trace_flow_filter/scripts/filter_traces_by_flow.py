@@ -136,21 +136,35 @@ def choose_best_flow(flow_match: dict[str, dict]) -> tuple[str | None, dict | No
 def resolve_signatures_dir(
     explicit_dir: Path | None,
     signatures_root: Path,
+    infer_name: str | None,
     signature_name: str | None,
 ) -> Path:
     if explicit_dir is not None:
         return explicit_dir
 
-    if signature_name:
-        return signatures_root / signature_name
+    if infer_name:
+        infer_dir = signatures_root / infer_name
+    else:
+        infer_candidates = sorted(
+            [p for p in signatures_root.glob("infer-*") if p.is_dir()],
+            key=lambda p: p.name,
+        )
+        if not infer_candidates:
+            raise FileNotFoundError(f"No infer-* directories found under: {signatures_root}")
+        infer_dir = infer_candidates[-1]
 
-    candidates = sorted(
-        [p for p in signatures_root.glob("signatures-result-*") if p.is_dir()],
-        key=lambda p: p.name,
-    )
-    if not candidates:
-        raise FileNotFoundError(f"No signatures-result-* directories found under: {signatures_root}")
-    return candidates[-1]
+    if signature_name:
+        signature_dir = infer_dir / signature_name
+    else:
+        signature_candidates = sorted(
+            [p for p in infer_dir.glob("signature-*") if p.is_dir()],
+            key=lambda p: p.name,
+        )
+        if not signature_candidates:
+            raise FileNotFoundError(f"No signature-* directories found under: {infer_dir}")
+        signature_dir = signature_candidates[-1]
+
+    return signature_dir / "non_empty"
 
 
 def main() -> int:
@@ -160,18 +174,29 @@ def main() -> int:
         type=Path,
         default=Path("experiments/epic001c_testcase_flow_partition/outputs/manifest_with_testcase_flows.xml"),
     )
-    parser.add_argument("--signatures-dir", type=Path, default=None, help="Full path to a signatures result dir")
+    parser.add_argument(
+        "--signatures-dir",
+        type=Path,
+        default=None,
+        help="Full path to a non_empty signatures dir",
+    )
     parser.add_argument(
         "--signatures-root",
         type=Path,
         default=Path("artifacts/signatures"),
-        help="Root dir containing signatures-result-* folders",
+        help="Root dir containing infer-* folders",
+    )
+    parser.add_argument(
+        "--infer-name",
+        type=str,
+        default=None,
+        help="Folder name under --signatures-root (e.g., infer-2026.03.09-14:42:44)",
     )
     parser.add_argument(
         "--signature-name",
         type=str,
         default=None,
-        help="Folder name under --signatures-root (e.g., signatures-result-2026.03.08-21:21:05)",
+        help="Folder name under selected infer dir (e.g., signature-2026.03.09-14:43:10)",
     )
     parser.add_argument(
         "--output-dir",
@@ -182,7 +207,10 @@ def main() -> int:
 
     if not args.flow_xml.exists():
         raise FileNotFoundError(f"Flow XML not found: {args.flow_xml}")
-    signatures_dir = resolve_signatures_dir(args.signatures_dir, args.signatures_root, args.signature_name)
+    signatures_dir = resolve_signatures_dir(args.signatures_dir,
+                                            args.signatures_root,
+                                            args.infer_name,
+                                            args.signature_name)
     if not signatures_dir.exists():
         raise FileNotFoundError(f"Signatures dir not found: {signatures_dir}")
 
