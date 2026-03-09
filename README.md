@@ -36,16 +36,18 @@ source .venv/bin/activate && python tools/run-infer-all-juliet.py 78
 ```text
 artifacts/
 ├── infer-results/
-│   └── juliet-YYYY.MM.DD-HH:MM:SS/
+│   └── infer-YYYY.MM.DD-HH:MM:SS/
 │       ├── CWE.../infer-out/
 │       └── analysis/
 │           ├── no_issue_files.txt
 │           └── result.csv
 └── signatures/
-    └── signatures-result-YYYY.MM.DD-HH:MM:SS/
-        ├── CWE.../*.json             # alarm별 signature
-        └── analysis/
-            └── signature_counts.csv  # CWE별 통계 + TOTAL
+    └── infer-YYYY.MM.DD-HH:MM:SS/
+        └── signature-YYYY.MM.DD-HH:MM:SS/
+            ├── non_empty/
+            │   ├── CWE.../*.json                 # bug_trace non-empty signature
+            │   └── analysis/signature_counts.csv # CWE별 통계 + TOTAL
+            └── flow_matched/                     # placeholder (추후 생성)
 ```
 
 ## 스크립트 소개
@@ -55,8 +57,9 @@ artifacts/
   - `issue / no_issue / error` 집계, `analysis/result.csv`, `analysis/no_issue_files.txt`를 항상 생성
   - infer 실행 후 signature도 항상 생성
 - **Signature 생성**: `tools/generate-signature.py`
-  - `infer-out/report.json`에서 `bug_trace`가 있는 이슈를 JSON으로 분리 저장
-  - `analysis/signature_counts.csv`에 CWE별 통계 저장
+  - `infer-out/report.json`에서 `bug_trace`가 있는 이슈를 `non_empty/`에 JSON으로 분리 저장
+  - `non_empty/analysis/signature_counts.csv`에 CWE별 통계 저장
+  - 동일 infer run 기준으로 `signatures/infer-*/signature-*` 계층으로 저장
 
 ## 그 외 자주 쓰는 명령어
 
@@ -68,7 +71,7 @@ python tools/run-infer-all-juliet.py 78
 python tools/run-infer-all-juliet.py --files juliet-test-suite-v1.3/C/testcases/CWE78_OS_Command_Injection/s01/CWE78_OS_Command_Injection__char_console_execlp_52a.c
 
 # 기존 infer 결과에서 signature만 생성
-python tools/generate-signature.py --input-dir artifacts/infer-results/juliet-2026.03.08-18:04:18
+python tools/generate-signature.py --input-dir artifacts/infer-results/infer-2026.03.08-18:04:18
 ```
 
 ## 메모

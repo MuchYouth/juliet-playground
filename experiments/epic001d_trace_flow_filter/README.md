@@ -5,7 +5,8 @@
 
 ## 입력
 - Flow XML: `experiments/epic001c_testcase_flow_partition/outputs/manifest_with_testcase_flows.xml`
-- Signatures: 기본값은 `artifacts/signatures/` 아래의 **가장 최신** `signatures-result-*` 폴더
+- Signatures: 기본값은 `artifacts/signatures/` 아래의 **가장 최신**
+  `infer-*/signature-*/non_empty` 폴더
 
 ## 매칭 규칙
 1. trace 디렉토리명(`CWE78_12-...`)을 testcase key로 사용
@@ -29,13 +30,14 @@ python experiments/epic001d_trace_flow_filter/scripts/filter_traces_by_flow.py
 특정 시그니처 지정:
 ```bash
 python experiments/epic001d_trace_flow_filter/scripts/filter_traces_by_flow.py \
-  --signature-name signatures-result-2026.03.08-21:21:05
+  --infer-name infer-2026.03.09-14:42:44 \
+  --signature-name signature-2026.03.09-14:43:10
 ```
 
 또는 절대/상대 경로로 직접 지정:
 ```bash
 python experiments/epic001d_trace_flow_filter/scripts/filter_traces_by_flow.py \
-  --signatures-dir artifacts/signatures/signatures-result-2026.03.08-21:21:05
+  --signatures-dir artifacts/signatures/infer-2026.03.09-14:42:44/signature-2026.03.09-14:43:10/non_empty
 ```
 
 추가 리포트:
