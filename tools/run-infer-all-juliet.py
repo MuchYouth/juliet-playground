@@ -15,9 +15,11 @@ import time
 import typer
 
 TOTAL_CORES = os.cpu_count() or 4
-MIN_CORES_PER_JOB = 2
-MAX_PARALLEL_JOBS = max(1, TOTAL_CORES // MIN_CORES_PER_JOB)
-CORES_PER_JOB = max(1, TOTAL_CORES // MAX_PARALLEL_JOBS)
+# Conservative memory-aware parallelization to prevent OOM
+# Each infer process uses ~500MB-1GB memory
+CORES_PER_JOB = 1
+MAX_PARALLEL_JOBS = TOTAL_CORES  # Conservative: one job per core
+MAX_CWE_PARALLEL = 1  # Process CWEs sequentially to control memory usage
 VALID_EXTENSIONS = {'c', 'cpp'}
 WINDOWS_SPECIFIC_MARKERS = ('w32', 'wchar_t')
 
@@ -49,6 +51,16 @@ def find_cwe_dir(cwe_number: int) -> Optional[str]:
         if entry.startswith(prefix):
             return entry
     return None
+
+
+def find_all_cwe_dirs() -> List[str]:
+    """Find all CWE directories in the testcase directory."""
+    cwe_dirs = []
+    for entry in os.listdir(JULIET_TESTCASE_DIR):
+        if entry.startswith('CWE') and os.path.isdir(
+                os.path.join(JULIET_TESTCASE_DIR, entry)):
+            cwe_dirs.append(entry)
+    return sorted(cwe_dirs)
 
 
 def iter_candidate_files(target_dir: str) -> Generator[str, None, None]:
@@ -321,6 +333,8 @@ def main(cwes: Optional[List[int]] = typer.Argument(None),
          generate_signature: bool = typer.Option(
              False, help='Generate signatures after infer run'),
          global_result: bool = typer.Option(False),
+         all_cwes: bool = typer.Option(
+             False, '--all', help='Run all CWEs in the testcase directory'),
          files: List[str] = typer.Option(
              [], '--files', help='Run infer for specific files (repeatable)'),
          max_cases: Optional[int] = typer.Option(
@@ -341,9 +355,37 @@ def main(cwes: Optional[List[int]] = typer.Argument(None),
         result_map['FILES'] = run_infer_for_files(files,
                                                   juliet_result_dir,
                                                   max_cases=max_cases)
+    elif all_cwes:
+        cwe_dirs = find_all_cwe_dirs()
+        print(f'Found {len(cwe_dirs)} CWE directories to process')
+        print(f'Running {MAX_CWE_PARALLEL} CWEs in parallel...')
+        
+        # Parallel CWE processing
+        cwe_futures = []
+        with concurrent.futures.ProcessPoolExecutor(
+                max_workers=MAX_CWE_PARALLEL) as cwe_executor:
+            for cwe_dir in cwe_dirs:
+                future = cwe_executor.submit(
+                    run_infer_all, cwe_dir, juliet_result_dir, max_cases)
+                cwe_futures.append((cwe_dir, future))
+            
+            # Collect results as they complete
+            completed = 0
+            for cwe_dir, future in cwe_futures:
+                try:
+                    result_map[cwe_dir] = future.result()
+                    completed += 1
+                    print(f'[{completed}/{len(cwe_dirs)}] Completed {cwe_dir}')
+                except Exception as exc:
+                    print(f'[{completed}/{len(cwe_dirs)}] Failed {cwe_dir}: {exc}')
+                    result_map[cwe_dir] = {
+                        'issue': 0, 'no_issue': 0, 'error': 0,
+                        'no_issue_files': [], 'time': 0
+                    }
+                    completed += 1
     else:
         if not cwes:
-            raise typer.BadParameter('Provide cwes or use --files')
+            raise typer.BadParameter('Provide cwes, use --all, or use --files')
         for cwe_number in cwes:
             cwe_dir = find_cwe_dir(cwe_number)
             if cwe_dir is None:
