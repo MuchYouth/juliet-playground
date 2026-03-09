@@ -1,6 +1,6 @@
 from typing import Dict, Generator, List, Optional, Set, Tuple
 
-from paths import PROJECT_HOME, JULIET_TESTCASE_DIR, INFER_BIN, RESULT_DIR, GLOBAL_RESULT_DIR, PULSE_TAINT_CONFIG
+from paths import PROJECT_HOME, JULIET_TESTCASE_DIR, INFER_BIN, RESULT_DIR, INFER_RESULTS_DIR, GLOBAL_INFER_RESULTS_DIR, PULSE_TAINT_CONFIG
 
 import concurrent.futures
 import csv
@@ -330,10 +330,10 @@ def main(cwes: Optional[List[int]] = typer.Argument(None),
         raise typer.BadParameter(
             f'Pulse taint config not found: {PULSE_TAINT_CONFIG}')
 
-    result_dir = GLOBAL_RESULT_DIR if global_result else RESULT_DIR
-    os.makedirs(result_dir, exist_ok=True)
+    infer_results_root = GLOBAL_INFER_RESULTS_DIR if global_result else INFER_RESULTS_DIR
+    os.makedirs(infer_results_root, exist_ok=True)
     timestamp = datetime.datetime.now().strftime('%Y.%m.%d-%H:%M:%S')
-    juliet_result_dir = os.path.join(result_dir, f'juliet-result-{timestamp}')
+    juliet_result_dir = os.path.join(infer_results_root, f'juliet-{timestamp}')
     os.makedirs(juliet_result_dir, exist_ok=True)
 
     result_map: Dict[object, Dict[str, object]] = {}

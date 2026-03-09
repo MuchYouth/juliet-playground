@@ -10,18 +10,18 @@ from typing import Iterable
 
 import typer
 
-from paths import RESULT_DIR
+from paths import RESULT_DIR, INFER_RESULTS_DIR
 
 
-def find_latest_juliet_result_dir(artifacts_dir: Path) -> Path:
+def find_latest_juliet_result_dir(infer_results_dir: Path) -> Path:
     candidates: Iterable[Path] = (
-        p for p in artifacts_dir.iterdir()
-        if p.is_dir() and p.name.startswith('juliet-result-')
+        p for p in infer_results_dir.iterdir()
+        if p.is_dir() and p.name.startswith('juliet-')
     )
     latest = max(candidates, key=lambda p: p.stat().st_mtime, default=None)
     if latest is None:
         raise typer.BadParameter(
-            f'No juliet-result-* directory found under: {artifacts_dir}')
+            f'No juliet-* directory found under: {infer_results_dir}')
     return latest
 
 
@@ -110,13 +110,13 @@ def generate_signatures(input_dir: Path,
 
 
 def main(input_dir: Path = typer.Option(
-            None, '--input-dir', help='Input juliet-result-* directory'),
+            None, '--input-dir', help='Input juliet-* directory'),
          output_root: Path = typer.Option(
             Path(RESULT_DIR) / 'signatures',
             '--output-root',
             help='Root directory for signatures-result-* output')):
     if input_dir is None:
-        input_dir = find_latest_juliet_result_dir(Path(RESULT_DIR))
+        input_dir = find_latest_juliet_result_dir(Path(INFER_RESULTS_DIR))
 
     output_dir = generate_signatures(input_dir=input_dir,
                                      output_root=output_root)

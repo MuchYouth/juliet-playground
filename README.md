@@ -35,10 +35,11 @@ source .venv/bin/activate && python tools/run-infer-all-juliet.py 78 --max-cases
 
 ```text
 artifacts/
-├── juliet-result-YYYY.MM.DD-HH:MM:SS/
-│   ├── CWE.../infer-out/
-│   ├── no_issue_files.txt
-│   └── result.csv                    # --generate-csv 사용 시
+├── infer-results/
+│   └── juliet-YYYY.MM.DD-HH:MM:SS/
+│       ├── CWE.../infer-out/
+│       ├── no_issue_files.txt
+│       └── result.csv                    # --generate-csv 사용 시
 └── signatures/
     └── signatures-result-YYYY.MM.DD-HH:MM:SS/
         ├── CWE.../*.json             # alarm별 signature
@@ -68,7 +69,7 @@ python tools/run-infer-all-juliet.py 78 --max-cases 3 --generate-csv
 python tools/run-infer-all-juliet.py --files juliet-test-suite-v1.3/C/testcases/CWE78_OS_Command_Injection/s01/CWE78_OS_Command_Injection__char_console_execlp_52a.c
 
 # 기존 infer 결과에서 signature만 생성
-python tools/generate-signature.py --input-dir artifacts/juliet-result-2026.03.08-18:04:18
+python tools/generate-signature.py --input-dir artifacts/infer-results/juliet-2026.03.08-18:04:18
 ```
 
 ## 메모
