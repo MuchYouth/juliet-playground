@@ -2,7 +2,15 @@
   "pulse-taint-sources": [
     {
       "procedure": "fread",
+      "taint_target": "ReturnValue"
+    },
+    {
+      "procedure": "fread",
       "taint_target": "AllArguments"
+    },
+    {
+      "procedure": "read",
+      "taint_target": "ReturnValue"
     },
     {
       "procedure": "read",
@@ -10,7 +18,15 @@
     },
     {
       "procedure": "slurp_read",
+      "taint_target": "ReturnValue"
+    },
+    {
+      "procedure": "slurp_read",
       "taint_target": "AllArguments"
+    },
+    {
+      "procedure": "fscanf",
+      "taint_target": "ReturnValue"
     },
     {
       "procedure": "fscanf",
@@ -18,7 +34,15 @@
     },
     {
       "procedure": "recv",
+      "taint_target": "ReturnValue"
+    },
+    {
+      "procedure": "recv",
       "taint_target": "AllArguments"
+    },
+    {
+      "procedure": "recvfrom",
+      "taint_target": "ReturnValue"
     },
     {
       "procedure": "recvfrom",
@@ -26,26 +50,59 @@
     },
     {
       "procedure": "fgets",
+      "taint_target": "ReturnValue"
+    },
+    {
+      "procedure": "fgets",
       "taint_target": "AllArguments"
     },
     {
-      "procedure": "getc"
+      "procedure": "getc",
+      "taint_target": "ReturnValue"
     },
     {
-      "procedure": "_IO_getc"
+      "procedure": "getc",
+      "taint_target": "AllArguments"
     },
     {
-      "procedure": "fgetc"
+      "procedure": "_IO_getc",
+      "taint_target": "ReturnValue"
     },
     {
-      "procedure": "getenv"
+      "procedure": "_IO_getc",
+      "taint_target": "AllArguments"
+    },
+    {
+      "procedure": "fgetc",
+      "taint_target": "ReturnValue"
+    },
+    {
+      "procedure": "fgetc",
+      "taint_target": "AllArguments"
+    },
+    {
+      "procedure": "getenv",
+      "taint_target": "ReturnValue"
+    },
+    {
+      "procedure": "getenv",
+      "taint_target": "AllArguments"
+    },
+    {
+      "procedure": "gnutls_x509_crt_get_subject_alt_name",
+      "taint_target": "ReturnValue"
     },
     {
       "procedure": "gnutls_x509_crt_get_subject_alt_name",
       "taint_target": "AllArguments"
     },
     {
-      "procedure": "readdir"
+      "procedure": "readdir",
+      "taint_target": "ReturnValue"
+    },
+    {
+      "procedure": "readdir",
+      "taint_target": "AllArguments"
     }
   ],
   "pulse-taint-sinks": [
