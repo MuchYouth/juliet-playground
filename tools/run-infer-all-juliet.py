@@ -157,16 +157,8 @@ def _collect_results(futures: List, summary: Dict[str, object]) -> None:
             summary['no_issue_files'].append(res['file'])
 
 
-def run_infer_all(cwe_dir,
-                  result_dir,
-                  max_cases: Optional[int] = None,
-                  executed_cases: Optional[List[int]] = None,
-                  processed_groups: Optional[set] = None):
-    if executed_cases is None:
-        executed_cases = [0]
-    if processed_groups is None:
-        processed_groups = set()
-
+def run_infer_all(cwe_dir, result_dir):
+    processed_groups = set()
     summary: Dict[str, object] = {
         'issue': 0,
         'no_issue': 0,
@@ -180,9 +172,6 @@ def run_infer_all(cwe_dir,
     with concurrent.futures.ProcessPoolExecutor(
             max_workers=MAX_PARALLEL_JOBS) as executor:
         for file_path in iter_candidate_files(target_dir):
-            if max_cases is not None and executed_cases[0] >= max_cases:
-                break
-
             parsed = parse_case_group(file_path)
             if parsed is None:
                 continue
@@ -199,7 +188,6 @@ def run_infer_all(cwe_dir,
             infer_cmd = build_infer_command(target_files, extension)
             futures.append(
                 executor.submit(run_case, result_path, infer_cmd, file_path))
-            executed_cases[0] += 1
 
         _collect_results(futures, summary)
 
@@ -207,8 +195,7 @@ def run_infer_all(cwe_dir,
     return summary
 
 
-def run_infer_for_files(files: List[str], result_dir: str,
-                        max_cases: Optional[int] = None):
+def run_infer_for_files(files: List[str], result_dir: str):
     summary: Dict[str, object] = {
         'issue': 0,
         'no_issue': 0,
@@ -216,16 +203,12 @@ def run_infer_for_files(files: List[str], result_dir: str,
         'no_issue_files': []
     }
     start_time = time.time()
-    executed_cases = [0]
     processed_targets: Set[Tuple[str, ...]] = set()
 
     futures = []
     with concurrent.futures.ProcessPoolExecutor(
             max_workers=MAX_PARALLEL_JOBS) as executor:
         for file_path in files:
-            if max_cases is not None and executed_cases[0] >= max_cases:
-                break
-
             abs_file = os.path.abspath(file_path)
             if not os.path.isfile(abs_file):
                 raise typer.BadParameter(f'File not found: {file_path}')
@@ -263,7 +246,6 @@ def run_infer_for_files(files: List[str], result_dir: str,
             infer_cmd = build_infer_command(target_files, extension)
             futures.append(
                 executor.submit(run_case, result_path, infer_cmd, abs_file))
-            executed_cases[0] += 1
 
         _collect_results(futures, summary)
 
@@ -323,9 +305,7 @@ def load_signature_module():
 def main(cwes: Optional[List[int]] = typer.Argument(None),
          global_result: bool = typer.Option(False),
          files: List[str] = typer.Option(
-             [], '--files', help='Run infer for specific files (repeatable)'),
-         max_cases: Optional[int] = typer.Option(
-             None, help='Maximum number of testcases to run for each CWE')):
+             [], '--files', help='Run infer for specific files (repeatable)')):
 
     if not os.path.exists(PULSE_TAINT_CONFIG):
         raise typer.BadParameter(
@@ -339,9 +319,7 @@ def main(cwes: Optional[List[int]] = typer.Argument(None),
 
     result_map: Dict[object, Dict[str, object]] = {}
     if files:
-        result_map['FILES'] = run_infer_for_files(files,
-                                                  juliet_result_dir,
-                                                  max_cases=max_cases)
+        result_map['FILES'] = run_infer_for_files(files, juliet_result_dir)
     else:
         if not cwes:
             raise typer.BadParameter('Provide cwes or use --files')
@@ -349,9 +327,7 @@ def main(cwes: Optional[List[int]] = typer.Argument(None),
             cwe_dir = find_cwe_dir(cwe_number)
             if cwe_dir is None:
                 continue
-            result_map[cwe_number] = run_infer_all(cwe_dir,
-                                                   juliet_result_dir,
-                                                   max_cases=max_cases)
+            result_map[cwe_number] = run_infer_all(cwe_dir, juliet_result_dir)
 
     generate_result_csv(result_map, juliet_result_dir)
     generate_no_issue_files(result_map, juliet_result_dir)

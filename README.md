@@ -28,7 +28,7 @@ cd /home/sojeon/Desktop/juliet-playground && python3 -m venv .venv && source .ve
 ### 2) 바로 실행 (한 줄)
 
 ```bash
-source .venv/bin/activate && python tools/run-infer-all-juliet.py 78 --max-cases 3
+source .venv/bin/activate && python tools/run-infer-all-juliet.py 78
 ```
 
 ## 결과 위치
@@ -62,7 +62,7 @@ artifacts/
 
 ```bash
 # Infer만 빠르게 실행
-python tools/run-infer-all-juliet.py 78 --max-cases 3
+python tools/run-infer-all-juliet.py 78
 
 # 특정 파일(해당 flow variant 그룹)만 실행
 python tools/run-infer-all-juliet.py --files juliet-test-suite-v1.3/C/testcases/CWE78_OS_Command_Injection/s01/CWE78_OS_Command_Injection__char_console_execlp_52a.c
