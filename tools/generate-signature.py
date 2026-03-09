@@ -6,23 +6,38 @@ import json
 import os
 from pathlib import Path
 import re
-from typing import Iterable
+from typing import Iterable, Optional
 
 import typer
 
 from paths import RESULT_DIR, INFER_RESULTS_DIR
 
 
-def find_latest_juliet_result_dir(infer_results_dir: Path) -> Path:
+def find_latest_infer_run_dir(infer_results_dir: Path) -> Path:
     candidates: Iterable[Path] = (
         p for p in infer_results_dir.iterdir()
-        if p.is_dir() and p.name.startswith('juliet-')
+        if p.is_dir() and p.name.startswith('infer-')
     )
     latest = max(candidates, key=lambda p: p.stat().st_mtime, default=None)
     if latest is None:
         raise typer.BadParameter(
-            f'No juliet-* directory found under: {infer_results_dir}')
+            f'No infer-* directory found under: {infer_results_dir}')
     return latest
+
+
+def resolve_infer_run_name(input_dir: Path,
+                           infer_run_name: Optional[str] = None) -> str:
+    if infer_run_name is not None:
+        if not infer_run_name.startswith('infer-'):
+            raise typer.BadParameter(
+                f'infer_run_name must start with "infer-": {infer_run_name}')
+        return infer_run_name
+
+    name = input_dir.name
+    if not name.startswith('infer-'):
+        raise typer.BadParameter(
+            f'Input directory must be infer-* directory: {input_dir}')
+    return name
 
 
 def get_group_key(case_name: str) -> str:
@@ -32,8 +47,8 @@ def get_group_key(case_name: str) -> str:
     return match.group(1).upper()
 
 
-def write_signature_stats_csv(output_dir: Path, stats_map) -> None:
-    stats_dir = output_dir / 'analysis'
+def write_signature_stats_csv(non_empty_dir: Path, stats_map) -> None:
+    stats_dir = non_empty_dir / 'analysis'
     os.makedirs(stats_dir, exist_ok=True)
     csv_path = stats_dir / 'signature_counts.csv'
     columns = ['group_key', 'report_alarms_total', 'bug_trace_nonempty',
@@ -61,11 +76,19 @@ def write_signature_stats_csv(output_dir: Path, stats_map) -> None:
 
 
 def generate_signatures(input_dir: Path,
-                        output_root: Path = Path(RESULT_DIR) / 'signatures'
+                        output_root: Path = Path(RESULT_DIR) / 'signatures',
+                        infer_run_name: Optional[str] = None,
+                        signature_timestamp: Optional[str] = None
                         ) -> Path:
-    timestamp = datetime.datetime.now().strftime('%Y.%m.%d-%H:%M:%S')
-    output_dir = output_root / f'signatures-result-{timestamp}'
-    os.makedirs(output_dir, exist_ok=True)
+    infer_run_name = resolve_infer_run_name(input_dir, infer_run_name)
+    if signature_timestamp is None:
+        signature_timestamp = datetime.datetime.now().strftime('%Y.%m.%d-%H:%M:%S')
+
+    output_dir = output_root / infer_run_name / f'signature-{signature_timestamp}'
+    non_empty_dir = output_dir / 'non_empty'
+    flow_matched_dir = output_dir / 'flow_matched'
+    os.makedirs(non_empty_dir, exist_ok=True)
+    os.makedirs(flow_matched_dir, exist_ok=True)
     stats_map = {}
 
     for d in sorted(
@@ -100,25 +123,26 @@ def generate_signatures(input_dir: Path,
                 continue
 
             stats_map[group_key]['bug_trace_nonempty'] += 1
-            os.makedirs('{}/{}'.format(output_dir, d), exist_ok=True)
-            output_json = '{}/{}/{}.json'.format(output_dir, d, cnt)
+            testcase_dir = non_empty_dir / d
+            os.makedirs(testcase_dir, exist_ok=True)
+            output_json = testcase_dir / f'{cnt}.json'
             with open(output_json, 'w') as fp:
                 json.dump(alarm, fp, indent=2)
             stats_map[group_key]['signatures_written'] += 1
             cnt += 1
 
-    write_signature_stats_csv(output_dir, stats_map)
+    write_signature_stats_csv(non_empty_dir, stats_map)
     return output_dir
 
 
 def main(input_dir: Path = typer.Option(
-            None, '--input-dir', help='Input juliet-* directory'),
+            None, '--input-dir', help='Input infer-* directory'),
          output_root: Path = typer.Option(
             Path(RESULT_DIR) / 'signatures',
             '--output-root',
-            help='Root directory for signatures-result-* output')):
+            help='Root directory for signatures output')):
     if input_dir is None:
-        input_dir = find_latest_juliet_result_dir(Path(INFER_RESULTS_DIR))
+        input_dir = find_latest_infer_run_dir(Path(INFER_RESULTS_DIR))
 
     output_dir = generate_signatures(input_dir=input_dir,
                                      output_root=output_root)

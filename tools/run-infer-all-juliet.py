@@ -314,12 +314,12 @@ def main(cwes: Optional[List[int]] = typer.Argument(None),
     infer_results_root = GLOBAL_INFER_RESULTS_DIR if global_result else INFER_RESULTS_DIR
     os.makedirs(infer_results_root, exist_ok=True)
     timestamp = datetime.datetime.now().strftime('%Y.%m.%d-%H:%M:%S')
-    juliet_result_dir = os.path.join(infer_results_root, f'juliet-{timestamp}')
-    os.makedirs(juliet_result_dir, exist_ok=True)
+    infer_run_dir = os.path.join(infer_results_root, f'infer-{timestamp}')
+    os.makedirs(infer_run_dir, exist_ok=True)
 
     result_map: Dict[object, Dict[str, object]] = {}
     if files:
-        result_map['FILES'] = run_infer_for_files(files, juliet_result_dir)
+        result_map['FILES'] = run_infer_for_files(files, infer_run_dir)
     else:
         if not cwes:
             raise typer.BadParameter('Provide cwes or use --files')
@@ -327,15 +327,16 @@ def main(cwes: Optional[List[int]] = typer.Argument(None),
             cwe_dir = find_cwe_dir(cwe_number)
             if cwe_dir is None:
                 continue
-            result_map[cwe_number] = run_infer_all(cwe_dir, juliet_result_dir)
+            result_map[cwe_number] = run_infer_all(cwe_dir, infer_run_dir)
 
-    generate_result_csv(result_map, juliet_result_dir)
-    generate_no_issue_files(result_map, juliet_result_dir)
+    generate_result_csv(result_map, infer_run_dir)
+    generate_no_issue_files(result_map, infer_run_dir)
 
     signature_module = load_signature_module()
     signature_output_dir = signature_module.generate_signatures(
-        input_dir=Path(juliet_result_dir),
-        output_root=Path(RESULT_DIR) / 'signatures')
+        input_dir=Path(infer_run_dir),
+        output_root=Path(RESULT_DIR) / 'signatures',
+        infer_run_name=Path(infer_run_dir).name)
     print(f'Signatures generated at: {signature_output_dir}')
 
 
