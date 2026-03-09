@@ -43,7 +43,7 @@ python experiments/epic001a_code_field_inventory/scripts/extract_unique_code_fie
 - 모든 함수가 source/sink 모두에 포함됩니다.
   - source: 각 procedure마다 `ReturnValue`, `AllArguments` 2개 객체
   - sink: 각 procedure마다 `AllArguments` 1개 객체
-- 출력 스키마는 `tools/pulse-taint-config.from_tracer.json`과 동일한
+- 출력 스키마는 `config/legacy/pulse-taint-config.from_tracer.json`과 동일한
   `pulse-taint-sources`, `pulse-taint-sinks`를 사용합니다.
 
 원하면 출력 경로를 변경할 수 있습니다.

@@ -12,8 +12,8 @@ INFER_RESULTS_DIR = os.path.join(RESULT_DIR, 'infer-results')
 GLOBAL_INFER_RESULTS_DIR = os.path.join(GLOBAL_RESULT_DIR, 'infer-results')
 JULIET_TESTCASE_DIR = os.path.join(PROJECT_HOME, 'juliet-test-suite-v1.3', 'C',
                                    'testcases')
-PULSE_TAINT_CONFIG = os.path.join(PROJECT_HOME, 'tools',
-                                  'pulse-taint-config.from_juliet.json')
+PULSE_TAINT_CONFIG = os.path.join(PROJECT_HOME, 'config',
+                                  'pulse-taint-config.json')
 
 INFER_BIN = shutil.which('infer') or os.path.join(INFER_DIR, 'infer', 'bin',
                                                  'infer')

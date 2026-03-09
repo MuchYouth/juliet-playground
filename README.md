@@ -79,4 +79,4 @@ python tools/generate-signature.py --input-dir artifacts/infer-results/infer-202
 - `.cpp`는 `clang++`, `.c`는 `clang` 사용
 - `--files` 사용 시 `cwes` 인자는 무시
 - Juliet 파일명 규칙 기반으로 같은 flow variant 그룹을 함께 컴파일
-- Pulse taint 설정: `tools/pulse-taint-config.json`
+- Pulse taint 설정: `config/pulse-taint-config.json`
