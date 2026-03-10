@@ -78,6 +78,12 @@ def parse_args() -> argparse.Namespace:
         action='store_true',
         help='Overwrite train_patched_counterparts outputs if they already exist.',
     )
+    parser.add_argument(
+        '--dedup-mode',
+        choices=['none', 'row'],
+        default='row',
+        help='Normalized-slice dedup mode before export.',
+    )
     return parser.parse_args()
 
 
@@ -703,12 +709,119 @@ def find_slice_path(slice_dir: Path, testcase_key: str, role_name: str) -> Path 
     return existing[0] if existing else None
 
 
+def compact_code_for_hash(code: str) -> str:
+    return ''.join(str(code).split())
+
+
+def normalized_code_md5(code: str) -> str:
+    return hashlib.md5(compact_code_for_hash(code).encode('utf-8')).hexdigest()
+
+
+def dedupe_pairs_by_normalized_rows(*,
+                                    surviving_pairs: dict[str, list[dict[str, Any]]],
+                                    filtered_pair_reasons: Counter,
+                                    dedup_mode: str) -> tuple[dict[str, list[dict[str, Any]]], dict[str, Any]]:
+    if dedup_mode not in {'none', 'row'}:
+        raise ValueError(f'Unsupported dedup_mode: {dedup_mode}')
+
+    ordered_pair_ids = list(surviving_pairs.keys())
+    row_occurrences: dict[str, list[dict[str, Any]]] = {}
+    label_by_hash: dict[str, int] = {}
+    colliding_hashes: set[str] = set()
+    rows_before = 0
+
+    for pair_id in ordered_pair_ids:
+        pair_records = sorted(
+            surviving_pairs[pair_id],
+            key=lambda row: ROLE_SORT_ORDER.get(str(row['role']), 99),
+        )
+        for record in pair_records:
+            code_hash = normalized_code_md5(str(record['normalized_code']))
+            record['normalized_code_hash'] = code_hash
+            target = int(record['target'])
+            rows_before += 1
+            row_occurrences.setdefault(code_hash, []).append(
+                {
+                    'pair_id': pair_id,
+                    'testcase_key': str(record['testcase_key']),
+                    'role': str(record['role']),
+                    'target': target,
+                }
+            )
+            old_target = label_by_hash.get(code_hash)
+            if old_target is None:
+                label_by_hash[code_hash] = target
+            elif old_target != target:
+                colliding_hashes.add(code_hash)
+
+    duplicate_hash_groups = 0
+    duplicate_row_occurrences = 0
+    for code_hash, occurrences in row_occurrences.items():
+        if code_hash in colliding_hashes:
+            continue
+        if len(occurrences) > 1:
+            duplicate_hash_groups += 1
+            duplicate_row_occurrences += len(occurrences) - 1
+
+    collision_row_occurrences = sum(len(row_occurrences[code_hash]) for code_hash in colliding_hashes)
+
+    if dedup_mode == 'none':
+        deduped_pairs = surviving_pairs
+        pairs_dropped_duplicate = 0
+        pairs_dropped_collision = 0
+    else:
+        deduped_pairs: dict[str, list[dict[str, Any]]] = {}
+        seen_hashes: set[str] = set()
+        pairs_dropped_duplicate = 0
+        pairs_dropped_collision = 0
+
+        for pair_id in ordered_pair_ids:
+            pair_records = sorted(
+                surviving_pairs[pair_id],
+                key=lambda row: ROLE_SORT_ORDER.get(str(row['role']), 99),
+            )
+            pair_hashes = [str(record['normalized_code_hash']) for record in pair_records]
+
+            if any(code_hash in colliding_hashes for code_hash in pair_hashes):
+                filtered_pair_reasons['dedup_row_hash_collision'] += 1
+                pairs_dropped_collision += 1
+                continue
+            if any(code_hash in seen_hashes for code_hash in pair_hashes):
+                filtered_pair_reasons['dedup_duplicate_normalized_slice'] += 1
+                pairs_dropped_duplicate += 1
+                continue
+
+            deduped_pairs[pair_id] = pair_records
+            seen_hashes.update(pair_hashes)
+
+    rows_after = sum(len(records) for records in deduped_pairs.values())
+    dedup_summary = {
+        'mode': dedup_mode,
+        'selection_order': 'input_pair_order',
+        'row_hash_method': 'md5(compact_whitespace(normalized_code))',
+        'pairs_before': len(surviving_pairs),
+        'pairs_after': len(deduped_pairs),
+        'pairs_dropped_duplicate': pairs_dropped_duplicate,
+        'pairs_dropped_collision': pairs_dropped_collision,
+        'rows_before': rows_before,
+        'rows_after': rows_after,
+        'rows_removed': rows_before - rows_after,
+        'row_hashes_unique': len(row_occurrences),
+        'duplicate_hash_groups': duplicate_hash_groups,
+        'duplicate_row_occurrences': duplicate_row_occurrences,
+        'collision_hash_groups': len(colliding_hashes),
+        'collision_row_occurrences': collision_row_occurrences,
+    }
+    return deduped_pairs, dedup_summary
+
+
 def export_dataset(*,
                    pairs: list[dict[str, Any]],
                    paired_signatures_dir: Path,
                    slice_dir: Path,
                    dataset_export_dir: Path,
-                   overwrite: bool) -> dict[str, Any]:
+                   overwrite: bool,
+                   dedup_mode: str) -> dict[str, Any]:
     from tokenize_slices import (CONTENT_TOKEN_LIMIT, MAX_LENGTH, count_code_tokens,
                                  load_tokenizer, plot_distribution)
 
@@ -716,6 +829,8 @@ def export_dataset(*,
         raise FileNotFoundError(f'Paired signatures dir not found: {paired_signatures_dir}')
     if not slice_dir.exists():
         raise FileNotFoundError(f'Slice dir not found: {slice_dir}')
+    if dedup_mode not in {'none', 'row'}:
+        raise ValueError(f'Unsupported dedup_mode: {dedup_mode}')
 
     csv_path = dataset_export_dir / f'{DATASET_BASENAME}.csv'
     normalized_slices_dir = dataset_export_dir / f'{DATASET_BASENAME}_slices'
@@ -737,7 +852,6 @@ def export_dataset(*,
     source_files_seen: set[str] = set()
     source_files_failed: set[str] = set()
 
-    normalized_slice_records: list[dict[str, Any]] = []
     surviving_pairs: dict[str, list[dict[str, Any]]] = {}
     filtered_pair_reasons = Counter()
     counts = Counter()
@@ -842,7 +956,6 @@ def export_dataset(*,
                 'input_token_count_with_special': input_token_count,
                 'exceeds_510': exceeds_limit,
             }
-            normalized_slice_records.append(record)
             pair_records.append(record)
 
         if pair_invalid_reason is not None:
@@ -856,8 +969,14 @@ def export_dataset(*,
             continue
         surviving_pairs[pair_id] = pair_records
 
+    surviving_pairs, dedup_summary = dedupe_pairs_by_normalized_rows(
+        surviving_pairs=surviving_pairs,
+        filtered_pair_reasons=filtered_pair_reasons,
+        dedup_mode=dedup_mode,
+    )
+
     token_count_rows = sorted(
-        normalized_slice_records,
+        [row for pair_records in surviving_pairs.values() for row in pair_records],
         key=lambda row: (row['pair_id'], ROLE_SORT_ORDER.get(str(row['role']), 99), row['slice_filename']),
     )
     with token_counts_csv.open('w', newline='', encoding='utf-8') as f:
@@ -929,6 +1048,7 @@ def export_dataset(*,
         'normalized_slices_dir': str(normalized_slices_dir),
         'paired_signatures_dir': str(paired_signatures_dir),
         'slice_dir': str(slice_dir),
+        'dedup': dedup_summary,
         'split_unit': 'pair_id',
         'split_mode': 'inherited_train_val_only',
         'counts': {
@@ -969,6 +1089,7 @@ def export_dataset(*,
         'token_counts_csv': str(token_counts_csv),
         'token_distribution_png': str(token_distribution_png),
         'split_manifest_json': str(split_manifest_json),
+        'dedup': dedup_summary,
         'max_length': MAX_LENGTH,
         'content_token_limit': CONTENT_TOKEN_LIMIT,
         'token_stats': {
@@ -1045,6 +1166,7 @@ def main() -> int:
         slice_dir=slice_dir,
         dataset_export_dir=dataset_export_dir,
         overwrite=args.overwrite,
+        dedup_mode=args.dedup_mode,
     )
 
     result = {
@@ -1063,6 +1185,7 @@ def main() -> int:
         'token_counts_csv': str(export_result['token_counts_csv']),
         'token_distribution_png': str(export_result['token_distribution_png']),
         'split_manifest_json': str(export_result['split_manifest_json']),
+        'dedup_mode': args.dedup_mode,
         'summary_json': str(export_result['summary_json']),
     }
     print(json.dumps(result, ensure_ascii=False))

@@ -435,6 +435,114 @@ def load_pairs_jsonl(path: Path) -> list[dict[str, Any]]:
     return records
 
 
+def compact_code_for_hash(code: str) -> str:
+    return ''.join(str(code).split())
+
+
+def normalized_code_md5(code: str) -> str:
+    return hashlib.md5(compact_code_for_hash(code).encode('utf-8')).hexdigest()
+
+
+def dedupe_pairs_by_normalized_rows(
+    *,
+    surviving_pairs: dict[str, list[dict[str, Any]]],
+    filtered_pair_reasons: Counter,
+    dedup_mode: str,
+) -> tuple[dict[str, list[dict[str, Any]]], dict[str, Any]]:
+    if dedup_mode not in {'none', 'row'}:
+        raise ValueError(f'Unsupported dedup_mode: {dedup_mode}')
+
+    ordered_pair_ids = list(surviving_pairs.keys())
+    row_occurrences: dict[str, list[dict[str, Any]]] = {}
+    label_by_hash: dict[str, int] = {}
+    colliding_hashes: set[str] = set()
+    rows_before = 0
+
+    for pair_id in ordered_pair_ids:
+        pair_records = sorted(
+            surviving_pairs[pair_id],
+            key=lambda row: ROLE_SORT_ORDER.get(str(row['role']), 99),
+        )
+        for record in pair_records:
+            code_hash = normalized_code_md5(str(record['normalized_code']))
+            record['normalized_code_hash'] = code_hash
+            target = int(record['target'])
+            rows_before += 1
+            row_occurrences.setdefault(code_hash, []).append(
+                {
+                    'pair_id': pair_id,
+                    'testcase_key': str(record['testcase_key']),
+                    'role': str(record['role']),
+                    'target': target,
+                }
+            )
+            old_target = label_by_hash.get(code_hash)
+            if old_target is None:
+                label_by_hash[code_hash] = target
+            elif old_target != target:
+                colliding_hashes.add(code_hash)
+
+    duplicate_hash_groups = 0
+    duplicate_row_occurrences = 0
+    for code_hash, occurrences in row_occurrences.items():
+        if code_hash in colliding_hashes:
+            continue
+        if len(occurrences) > 1:
+            duplicate_hash_groups += 1
+            duplicate_row_occurrences += len(occurrences) - 1
+
+    collision_row_occurrences = sum(len(row_occurrences[code_hash]) for code_hash in colliding_hashes)
+
+    if dedup_mode == 'none':
+        deduped_pairs = surviving_pairs
+        pairs_dropped_duplicate = 0
+        pairs_dropped_collision = 0
+    else:
+        deduped_pairs: dict[str, list[dict[str, Any]]] = {}
+        seen_hashes: set[str] = set()
+        pairs_dropped_duplicate = 0
+        pairs_dropped_collision = 0
+
+        for pair_id in ordered_pair_ids:
+            pair_records = sorted(
+                surviving_pairs[pair_id],
+                key=lambda row: ROLE_SORT_ORDER.get(str(row['role']), 99),
+            )
+            pair_hashes = [str(record['normalized_code_hash']) for record in pair_records]
+
+            if any(code_hash in colliding_hashes for code_hash in pair_hashes):
+                filtered_pair_reasons['dedup_row_hash_collision'] += 1
+                pairs_dropped_collision += 1
+                continue
+            if any(code_hash in seen_hashes for code_hash in pair_hashes):
+                filtered_pair_reasons['dedup_duplicate_normalized_slice'] += 1
+                pairs_dropped_duplicate += 1
+                continue
+
+            deduped_pairs[pair_id] = pair_records
+            seen_hashes.update(pair_hashes)
+
+    rows_after = sum(len(records) for records in deduped_pairs.values())
+    dedup_summary = {
+        'mode': dedup_mode,
+        'selection_order': 'input_pair_order',
+        'row_hash_method': 'md5(compact_whitespace(normalized_code))',
+        'pairs_before': len(surviving_pairs),
+        'pairs_after': len(deduped_pairs),
+        'pairs_dropped_duplicate': pairs_dropped_duplicate,
+        'pairs_dropped_collision': pairs_dropped_collision,
+        'rows_before': rows_before,
+        'rows_after': rows_after,
+        'rows_removed': rows_before - rows_after,
+        'row_hashes_unique': len(row_occurrences),
+        'duplicate_hash_groups': duplicate_hash_groups,
+        'duplicate_row_occurrences': duplicate_row_occurrences,
+        'collision_hash_groups': len(colliding_hashes),
+        'collision_row_occurrences': collision_row_occurrences,
+    }
+    return deduped_pairs, dedup_summary
+
+
 def find_slice_path(slice_dir: Path, testcase_key: str, role_name: str) -> Path | None:
     candidates = [
         slice_dir / f'slice_{testcase_key}_{role_name}.c',
@@ -472,7 +580,8 @@ def export_dataset_from_pipeline(*,
                                  slice_dir: Path,
                                  output_dir: Path,
                                  split_seed: int,
-                                 train_ratio: float) -> dict[str, object]:
+                                 train_ratio: float,
+                                 dedup_mode: str) -> dict[str, object]:
     from tokenize_slices import (CONTENT_TOKEN_LIMIT, MAX_LENGTH, count_code_tokens,
                                  load_tokenizer, plot_distribution)
 
@@ -484,6 +593,8 @@ def export_dataset_from_pipeline(*,
         raise FileNotFoundError(f'Slice dir not found: {slice_dir}')
     if not (0.0 < train_ratio < 1.0):
         raise ValueError(f'train_ratio must be between 0 and 1: {train_ratio}')
+    if dedup_mode not in {'none', 'row'}:
+        raise ValueError(f'Unsupported dedup_mode: {dedup_mode}')
 
     output_dir.mkdir(parents=True, exist_ok=True)
     normalized_slices_dir = output_dir / 'normalized_slices'
@@ -505,7 +616,6 @@ def export_dataset_from_pipeline(*,
     source_files_seen: set[str] = set()
     source_files_failed: set[str] = set()
 
-    normalized_slice_records: list[dict[str, Any]] = []
     surviving_pairs: dict[str, list[dict[str, Any]]] = {}
     filtered_pair_reasons = Counter()
     counts = Counter()
@@ -611,7 +721,6 @@ def export_dataset_from_pipeline(*,
                 'input_token_count_with_special': input_token_count,
                 'exceeds_510': exceeds_limit,
             }
-            normalized_slice_records.append(record)
             pair_records.append(record)
 
         if pair_invalid_reason is not None:
@@ -625,8 +734,14 @@ def export_dataset_from_pipeline(*,
             continue
         surviving_pairs[pair_id] = pair_records
 
+    surviving_pairs, dedup_summary = dedupe_pairs_by_normalized_rows(
+        surviving_pairs=surviving_pairs,
+        filtered_pair_reasons=filtered_pair_reasons,
+        dedup_mode=dedup_mode,
+    )
+
     token_count_rows = sorted(
-        normalized_slice_records,
+        [row for pair_records in surviving_pairs.values() for row in pair_records],
         key=lambda row: (row['pair_id'], ROLE_SORT_ORDER.get(str(row['role']), 99), row['slice_filename']),
     )
     with normalized_token_counts_csv.open('w', newline='', encoding='utf-8') as f:
@@ -701,6 +816,7 @@ def export_dataset_from_pipeline(*,
         'pairs_jsonl': str(pairs_jsonl),
         'paired_signatures_dir': str(paired_signatures_dir),
         'slice_dir': str(slice_dir),
+        'dedup': dedup_summary,
         'split_unit': 'pair_id',
         'train_ratio': train_ratio,
         'test_ratio': round(1.0 - train_ratio, 6),
@@ -749,6 +865,7 @@ def export_dataset_from_pipeline(*,
         'max_length': MAX_LENGTH,
         'content_token_limit': CONTENT_TOKEN_LIMIT,
         'seed': split_seed,
+        'dedup': dedup_summary,
         'train_ratio': train_ratio,
         'test_ratio': round(1.0 - train_ratio, 6),
         'token_stats': {
@@ -812,6 +929,10 @@ def main(
         0.8,
         '--pair-train-ratio',
         help='Train ratio for pair-level train/test split'),
+    dedup_mode: str = typer.Option(
+        'row',
+        '--dedup-mode',
+        help='Normalized-slice dedup mode before split/export: none or row'),
 ):
     if not manifest.exists():
         raise typer.BadParameter(f'Manifest not found: {manifest}')
@@ -823,6 +944,8 @@ def main(
         raise typer.BadParameter('Provide cwes, use --all, or use --files')
     if not (0.0 < pair_train_ratio < 1.0):
         raise typer.BadParameter(f'pair_train_ratio must be between 0 and 1: {pair_train_ratio}')
+    if dedup_mode not in {'none', 'row'}:
+        raise typer.BadParameter(f'dedup_mode must be one of: none, row (got {dedup_mode})')
 
     if run_id is None:
         run_id = f'run-{now_ts()}'
@@ -1106,6 +1229,7 @@ def main(
                 output_dir=dataset_stage_dir,
                 split_seed=pair_split_seed,
                 train_ratio=pair_train_ratio,
+                dedup_mode=dedup_mode,
             ),
         )
 
@@ -1129,6 +1253,7 @@ def main(
                 sys.executable,
                 str(train_patched_counterparts_script),
                 '--run-dir', str(run_dir),
+                '--dedup-mode', dedup_mode,
             ],
             cwd=Path(PROJECT_HOME),
             logs_dir=logs_dir,
@@ -1218,6 +1343,7 @@ def main(
         'files': files,
         'pair_split_seed': pair_split_seed,
         'pair_train_ratio': pair_train_ratio,
+        'dedup_mode': dedup_mode,
         'committed_taint_config_path': str(committed_taint_config),
         'generated_taint_config_path': str(generated_taint_config),
         'selected_taint_config_path': selected_taint_config_str,
