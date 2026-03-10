@@ -56,6 +56,18 @@ def parse_args() -> argparse.Namespace:
         help='Output stage directory for generated slices; defaults to <run-dir>/06_slices/train_patched_counterparts.',
     )
     parser.add_argument(
+        '--output-pairs-jsonl',
+        type=Path,
+        default=None,
+        help='Output JSONL path for selected train_patched_counterparts pairs.',
+    )
+    parser.add_argument(
+        '--selection-summary-json',
+        type=Path,
+        default=None,
+        help='Output summary JSON path for train_patched_counterparts pair selection.',
+    )
+    parser.add_argument(
         '--pipeline-root',
         type=Path,
         default=Path(RESULT_DIR) / 'pipeline-runs',
@@ -249,12 +261,13 @@ def build_train_patched_counterparts(*,
                                      pair_dir: Path,
                                      dataset_export_dir: Path,
                                      signature_output_dir: Path,
+                                     output_pairs_jsonl: Path,
+                                     selection_summary_json: Path,
                                      overwrite: bool) -> dict[str, Any]:
     pairs_jsonl = pair_dir / 'pairs.jsonl'
     leftovers_jsonl = pair_dir / 'leftover_counterparts.jsonl'
     source_split_manifest_json = dataset_export_dir / 'split_manifest.json'
-    output_pairs_jsonl = pair_dir / f'{DATASET_BASENAME}_pairs.jsonl'
-    summary_json = pair_dir / f'{DATASET_BASENAME}_selection_summary.json'
+    summary_json = selection_summary_json
 
     if not pairs_jsonl.exists():
         raise FileNotFoundError(f'Pairs JSONL not found: {pairs_jsonl}')
@@ -267,6 +280,8 @@ def build_train_patched_counterparts(*,
     prepare_target(output_pairs_jsonl, overwrite=overwrite)
     prepare_target(summary_json, overwrite=overwrite)
     signature_output_dir.mkdir(parents=True, exist_ok=True)
+    output_pairs_jsonl.parent.mkdir(parents=True, exist_ok=True)
+    summary_json.parent.mkdir(parents=True, exist_ok=True)
 
     split_manifest = json.loads(source_split_manifest_json.read_text(encoding='utf-8'))
     train_val_pair_ids = set(split_manifest.get('pair_ids', {}).get('train_val') or [])
@@ -1129,10 +1144,23 @@ def main() -> int:
     if run_dir is None or pair_dir is None or dataset_export_dir is None or signature_output_dir is None or slice_output_dir is None:
         raise ValueError('Failed to resolve required paths.')
 
+    output_pairs_jsonl = (
+        args.output_pairs_jsonl.resolve()
+        if args.output_pairs_jsonl is not None
+        else pair_dir / f'{DATASET_BASENAME}_pairs.jsonl'
+    )
+    selection_summary_json = (
+        args.selection_summary_json.resolve()
+        if args.selection_summary_json is not None
+        else pair_dir / f'{DATASET_BASENAME}_selection_summary.json'
+    )
+
     selected = build_train_patched_counterparts(
         pair_dir=pair_dir,
         dataset_export_dir=dataset_export_dir,
         signature_output_dir=signature_output_dir,
+        output_pairs_jsonl=output_pairs_jsonl,
+        selection_summary_json=selection_summary_json,
         overwrite=args.overwrite,
     )
 

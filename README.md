@@ -116,11 +116,13 @@ artifacts/
   - `.c`는 `.c`, C++ trace는 `.cpp`로 저장
 - **Dataset export (pipeline 내장)**: `tools/run-epic001-pipeline.py`
   - 06에서 만든 slice를 기준으로 사용자 정의 함수명만 normalize
-  - normalize 후 CodeBERT 토큰 수를 재계산하고 pair 단위로 510 토큰 이하만 필터링
+  - normalize 후 공백 무시 MD5(`md5("".join(code.split()))`) 기준으로 row-level dedup 수행
+  - dedup 이후 CodeBERT 토큰 수를 재계산하고 pair 단위로 510 토큰 이하만 필터링/분할
   - `Real_Vul_data.csv`, `normalized_slices/`, 히스토그램/CSV를 생성
 - **Train patched counterpart export**: `tools/export_train_patched_counterparts.py`
   - 기존 `07_dataset_export/split_manifest.json`에서 `train_val`로 사용된 pair만 대상으로 함
   - `leftover_counterparts.jsonl`에서 testcase별 최상위 leftover counterpart 1개를 골라 평가용 데이터셋 생성
+  - base export와 동일하게 normalized slice 기준 dedup 가능 (`--dedup-mode`)
   - `train_patched_counterparts.csv`, `train_patched_counterparts_slices/`, 관련 summary/manifest를 생성
 
 ## 그 외 자주 쓰는 명령어
@@ -162,6 +164,22 @@ python tools/generate_slices.py
 # 기존 train_val 샘플들에 대응하는 patched counterpart 평가셋 생성
 python tools/export_train_patched_counterparts.py \
   --run-dir artifacts/pipeline-runs/run-2026.03.10-00:49:21
+
+# 기존 run의 Step 07 + 07b를 새 timestamped 폴더로 다시 생성 (기본)
+python tools/rerun-step07.py \
+  --run-dir artifacts/pipeline-runs/run-2026.03.10-00:49:21
+
+# Step 07만 다시 생성
+python tools/rerun-step07.py \
+  --run-dir artifacts/pipeline-runs/run-2026.03.10-00:49:21 \
+  --only-07
+
+# Step 07b(train patched counterparts)만 다시 생성
+# (기본은 기존 07_dataset_export를 사용하므로, 새 Step 07 결과에 붙이려면 --output-dir 지정)
+python tools/rerun-step07.py \
+  --run-dir artifacts/pipeline-runs/run-2026.03.10-00:49:21 \
+  --overwrite \
+  --only-07b
 ```
 
 ## 메모
