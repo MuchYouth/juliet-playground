@@ -5,6 +5,13 @@
 python experiments/epic001b_function_inventory/scripts/extract_function_inventory.py
 ```
 
+현재 스크립트가 직접 생성하는 canonical output:
+
+- `outputs/function_names_unique.csv`
+  - 컬럼: `function_name,count`
+- `outputs/summary.json`
+  - 총 comment 태그 수, 비어 있는 function 속성 수, unique 함수명 수 등을 포함
+
 ## 2) flow_family / operation_role 분류 + 중첩 그룹 출력
 ```bash
 python experiments/epic001b_function_inventory/scripts/categorize_function_names.py
@@ -31,3 +38,24 @@ python experiments/epic001b_function_inventory/scripts/categorize_function_names
 
 `source_sink`의 `role_variant`는 함수 본문 호출 기준으로 계산합니다.
 (본문에 source 계열 호출 포함 여부 + sink 계열 호출 포함 여부)
+
+## outputs 참고
+
+현재 기본 스크립트 기준 canonical output은 위에 적은
+
+- `function_names_unique.csv`
+- `summary.json`
+- `function_names_categorized.jsonl`
+- `grouped_family_role.json`
+- `category_summary.json`
+
+입니다.
+
+저장소에 함께 들어 있는 아래 파일들은 과거 실험/가공 산출물 예시이며,
+현재 `extract_function_inventory.py`, `categorize_function_names.py`가
+직접 생성하는 기본 산출물로 보장되지는 않습니다.
+
+- `outputs/function_names_categorized.csv`
+- `outputs/grouped_by_family.jsonl`
+- `outputs/grouped_by_role.jsonl`
+- `outputs/grouped_family_role.jsonl`

@@ -28,9 +28,15 @@
   - `duplicate_key_skipped`, `flaw_records_processed`
 
 ## 매크로 치환 규칙
-- `juliet-test-suite-v1.3/C/**`에서 `#define`를 전역 수집해 함수명을 치환합니다.
+- `juliet-test-suite-v1.3/C/**`에서 `#define`를 전역 수집합니다.
 - `RAND32`, `RAND64`는 항상 `rand`로 치환됩니다.
-- 다중 후보 매크로는 우선순위(`function_like` > `object_like`, 비조건부 > 조건부, 최신 정의 우선)로 선택합니다.
+- 매크로 body에서 replacement identifier를 추출해 함수명을 해석합니다.
+- 같은 원본 함수명에 대해 여러 replacement identifier가 발견되면
+  `function_name_macro_resolution.csv`에서 `resolved_multi`로 기록되고,
+  `resolved_names` 컬럼에 `|`로 연결된 여러 후보가 보존됩니다.
+- replacement identifier를 찾지 못하면 원본 함수명을 유지하고
+  `unresolved_no_identifier` 상태로 기록합니다.
+- `source_sink_candidate_map.json`에는 해석된 이름이 `(name, argc)` 기준으로 중복 제거되어 반영됩니다.
 
 ## pulse-taint config 생성 (옵션)
 `function_name_unique` 기준(동일한 unique 함수명 집합)으로 Infer용 `pulse-taint-config.json` 형태 파일을 생성합니다.
@@ -45,6 +51,8 @@ python experiments/epic001a_code_field_inventory/scripts/extract_unique_code_fie
   - sink: 각 procedure마다 `AllArguments` 1개 객체
 - 출력 스키마는 `config/legacy/pulse-taint-config.from_tracer.json`과 동일한
   `pulse-taint-sources`, `pulse-taint-sinks`를 사용합니다.
+- 통합 파이프라인에서는 이 기본 경로 대신
+  `run-.../02a_taint/pulse-taint-config.json`으로 출력 경로를 명시적으로 넘깁니다.
 
 원하면 출력 경로를 변경할 수 있습니다.
 ```bash
