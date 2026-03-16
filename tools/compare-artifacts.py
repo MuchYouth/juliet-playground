@@ -113,9 +113,9 @@ def detect_artifact_kind(path: Path) -> str:
     if (path / 'run_summary.json').exists():
         return 'pipeline_run'
     if (
-        primary_dataset_paths['summary_json'].exists()
-        and primary_dataset_paths['split_manifest_json'].exists()
-        and primary_dataset_paths['csv_path'].exists()
+        primary_dataset_paths.summary_json.exists()
+        and primary_dataset_paths.split_manifest_json.exists()
+        and primary_dataset_paths.csv_path.exists()
     ):
         return 'dataset_export'
     raise ValueError(
@@ -339,35 +339,35 @@ def compare_dataset_export(before_dir: Path, after_dir: Path, reporter: Reporter
         after_paths = build_dataset_export_paths(after_dir, dataset_basename)
         report_json_diff(
             reporter,
-            before_paths['summary_json'].name,
-            before_paths['summary_json'],
-            after_paths['summary_json'],
+            before_paths.summary_json.name,
+            before_paths.summary_json,
+            after_paths.summary_json,
         )
         report_json_diff(
             reporter,
-            before_paths['split_manifest_json'].name,
-            before_paths['split_manifest_json'],
-            after_paths['split_manifest_json'],
+            before_paths.split_manifest_json.name,
+            before_paths.split_manifest_json,
+            after_paths.split_manifest_json,
         )
         report_keyed_csv_diff(
             reporter,
-            before_paths['csv_path'].name,
-            before_paths['csv_path'],
-            after_paths['csv_path'],
+            before_paths.csv_path.name,
+            before_paths.csv_path,
+            after_paths.csv_path,
             make_real_vul_key,
         )
         report_keyed_csv_diff(
             reporter,
-            before_paths['dedup_dropped_csv'].name,
-            before_paths['dedup_dropped_csv'],
-            after_paths['dedup_dropped_csv'],
+            before_paths.dedup_dropped_csv.name,
+            before_paths.dedup_dropped_csv,
+            after_paths.dedup_dropped_csv,
             make_dedup_key,
         )
         report_keyed_csv_diff(
             reporter,
-            before_paths['token_counts_csv'].name,
-            before_paths['token_counts_csv'],
-            after_paths['token_counts_csv'],
+            before_paths.token_counts_csv.name,
+            before_paths.token_counts_csv,
+            after_paths.token_counts_csv,
             make_token_count_key,
         )
 
@@ -380,25 +380,25 @@ def compare_pair_trace(before_dir: Path, after_dir: Path, reporter: Reporter) ->
     after_patched_paths = build_patched_pairing_paths(after_dir)
     report_json_diff(
         reporter,
-        before_paths['summary_json'].name,
-        before_paths['summary_json'],
-        after_paths['summary_json'],
+        before_paths.summary_json.name,
+        before_paths.summary_json,
+        after_paths.summary_json,
     )
     report_pairs_jsonl_diff(
         reporter,
-        before_paths['pairs_jsonl'],
-        after_paths['pairs_jsonl'],
+        before_paths.pairs_jsonl,
+        after_paths.pairs_jsonl,
     )
     report_leftovers_diff(
         reporter,
-        before_paths['leftover_counterparts_jsonl'],
-        after_paths['leftover_counterparts_jsonl'],
+        before_paths.leftover_counterparts_jsonl,
+        after_paths.leftover_counterparts_jsonl,
     )
     report_json_diff(
         reporter,
-        before_patched_paths['selection_summary_json'].name,
-        before_patched_paths['selection_summary_json'],
-        after_patched_paths['selection_summary_json'],
+        before_patched_paths.selection_summary_json.name,
+        before_patched_paths.selection_summary_json,
+        after_patched_paths.selection_summary_json,
     )
 
 

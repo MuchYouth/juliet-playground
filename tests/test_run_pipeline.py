@@ -100,7 +100,18 @@ def test_full_subcommand_runs_internal_orchestration_and_writes_summary(monkeypa
             params.output_dir / 'summary.json',
         ]:
             write_text(output_path, 'ok\n')
-        return {'summary_json': str(params.output_dir / 'summary.json')}
+        return {
+            'dataset': {
+                'output_dir': str(params.output_dir),
+                'csv_path': str(params.output_dir / 'Real_Vul_data.csv'),
+                'dedup_dropped_csv': str(params.output_dir / 'Real_Vul_data_dedup_dropped.csv'),
+                'normalized_slices_dir': str(params.output_dir / 'normalized_slices'),
+                'token_counts_csv': str(params.output_dir / 'normalized_token_counts.csv'),
+                'token_distribution_png': str(params.output_dir / 'slice_token_distribution.png'),
+                'split_manifest_json': str(params.output_dir / 'split_manifest.json'),
+                'summary_json': str(params.output_dir / 'summary.json'),
+            }
+        }
 
     def fake_export_patched_dataset(params):
         called.append('07b_train_patched_counterparts_export')
@@ -124,9 +135,39 @@ def test_full_subcommand_runs_internal_orchestration_and_writes_summary(monkeypa
             exist_ok=True,
         )
         return {
-            'summary_json': str(
-                params.dataset_export_dir / 'train_patched_counterparts_summary.json'
-            )
+            'pairing': {
+                'output_dir': str(params.pair_dir),
+                'pairs_jsonl': str(params.output_pairs_jsonl),
+                'signatures_dir': str(params.signature_output_dir),
+                'selection_summary_json': str(params.selection_summary_json),
+            },
+            'slices': {
+                'output_dir': str(params.slice_output_dir),
+                'slice_dir': str(params.slice_output_dir / 'slice'),
+                'summary_json': str(params.slice_output_dir / 'summary.json'),
+            },
+            'dataset': {
+                'output_dir': str(params.dataset_export_dir),
+                'csv_path': str(params.dataset_export_dir / 'train_patched_counterparts.csv'),
+                'dedup_dropped_csv': str(
+                    params.dataset_export_dir / 'train_patched_counterparts_dedup_dropped.csv'
+                ),
+                'normalized_slices_dir': str(
+                    params.dataset_export_dir / 'train_patched_counterparts_slices'
+                ),
+                'token_counts_csv': str(
+                    params.dataset_export_dir / 'train_patched_counterparts_token_counts.csv'
+                ),
+                'token_distribution_png': str(
+                    params.dataset_export_dir / 'train_patched_counterparts_token_distribution.png'
+                ),
+                'split_manifest_json': str(
+                    params.dataset_export_dir / 'train_patched_counterparts_split_manifest.json'
+                ),
+                'summary_json': str(
+                    params.dataset_export_dir / 'train_patched_counterparts_summary.json'
+                ),
+            },
         }
 
     monkeypatch.setattr(
@@ -207,11 +248,11 @@ def test_full_subcommand_runs_internal_orchestration_and_writes_summary(monkeypa
     run_dir = pipeline_root / 'run-test'
     summary = json.loads((run_dir / 'run_summary.json').read_text(encoding='utf-8'))
     assert summary['status'] == 'success'
-    assert summary['run_id'] == 'run-test'
-    assert summary['cwes'] == [121]
-    assert summary['selected_reason'] == 'generated'
+    assert summary['run']['run_id'] == 'run-test'
+    assert summary['inputs']['cwes'] == [121]
+    assert summary['config']['taint_config']['selected_reason'] == 'generated'
     assert summary['steps']['03_infer_and_signature']['returncode'] == 0
-    assert Path(summary['outputs']['pairs_jsonl']).name == 'pairs.jsonl'
+    assert Path(summary['outputs']['stage05']['pairs_jsonl']).name == 'pairs.jsonl'
     assert (run_dir / 'logs' / '01_manifest_comment_scan.stdout.log').exists()
     assert (run_dir / 'logs' / '07b_train_patched_counterparts_export.stderr.log').exists()
 
@@ -280,7 +321,7 @@ def test_full_subcommand_writes_failed_summary_on_step_error(monkeypatch, tmp_pa
     )
     assert summary['status'] == 'failed'
     assert summary['error_message'] == 'trace flow failed'
-    assert summary['selected_reason'] == 'fallback_committed'
+    assert summary['config']['taint_config']['selected_reason'] == 'fallback_committed'
     assert '05_pair_trace_dataset' not in summary['steps']
 
 
@@ -354,11 +395,15 @@ def test_stage03_signature_subcommand_delegates(monkeypatch, tmp_path):
 
     captured: dict[str, object] = {}
 
-    def fake_main(**kwargs):
+    def fake_run_signature_generation(**kwargs):
         captured.update(kwargs)
-        return None
+        return {'output_dir': str(tmp_path / 'signatures' / 'infer-demo' / 'signature-demo')}
 
-    monkeypatch.setattr(module._stage03_signature, 'main', fake_main)
+    monkeypatch.setattr(
+        module._stage03_signature,
+        'run_signature_generation',
+        fake_run_signature_generation,
+    )
 
     result = run_module_main(
         module,
@@ -446,7 +491,7 @@ def test_stage07_subcommand_delegates(monkeypatch, tmp_path):
 
     def fake_export_primary_dataset(params):
         captured['params'] = params
-        return {'summary_json': str(tmp_path / 'summary.json')}
+        return {'dataset': {'summary_json': str(tmp_path / 'summary.json')}}
 
     monkeypatch.setattr(
         module._stage07_dataset_export, 'export_primary_dataset', fake_export_primary_dataset
@@ -488,7 +533,7 @@ def test_stage07b_subcommand_delegates(monkeypatch, tmp_path):
 
     def fake_export_patched_dataset(params):
         captured['params'] = params
-        return {'summary_json': str(tmp_path / 'summary.json')}
+        return {'dataset': {'summary_json': str(tmp_path / 'summary.json')}}
 
     monkeypatch.setattr(
         module._stage07b_patched_export, 'export_patched_dataset', fake_export_patched_dataset
@@ -496,18 +541,18 @@ def test_stage07b_subcommand_delegates(monkeypatch, tmp_path):
     monkeypatch.setattr(
         module._stage07b_patched_export,
         'resolve_paths',
-        lambda **kwargs: {
-            'run_dir': tmp_path / 'run',
-            'pair_dir': tmp_path / 'pair',
-            'dataset_export_dir': tmp_path / 'dataset',
-            'signature_output_dir': tmp_path / 'signatures',
-            'slice_output_dir': tmp_path / 'slices',
-        },
+        lambda **kwargs: module._stage07b_patched_export.ResolvedPatchedExportPaths(
+            run_dir=tmp_path / 'run',
+            pair_dir=tmp_path / 'pair',
+            dataset_export_dir=tmp_path / 'dataset',
+            signature_output_dir=tmp_path / 'signatures',
+            slice_output_dir=tmp_path / 'slices',
+        ),
     )
     monkeypatch.setattr(
         module._stage07b_patched_export,
         'validate_args',
-        lambda **kwargs: None,
+        lambda *args, **kwargs: None,
     )
 
     result = run_module_main(

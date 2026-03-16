@@ -16,6 +16,10 @@ from typing import Any, Callable, Optional
 from shared import dataset_dedup as _dataset_dedup
 from shared.artifact_layout import (
     TRAIN_PATCHED_COUNTERPARTS_BASENAME,
+    DatasetExportPaths,
+    PairTracePaths,
+    PatchedPairingPaths,
+    SliceStagePaths,
     build_dataset_export_paths,
     build_pair_trace_paths,
     build_patched_pairing_paths,
@@ -52,55 +56,25 @@ class FullRunPaths:
     infer_results_root: Path
     signatures_root: Path
     trace_dir: Path
-    pair_dir: Path
-    slice_stage_dir: Path
-    dataset_stage_dir: Path
     logs_dir: Path
     manifest_with_comments_xml: Path
     generated_taint_config: Path
-    function_names_unique_csv: Path
-    function_inventory_summary_json: Path
-    function_names_categorized_jsonl: Path
-    grouped_family_role_json: Path
-    category_summary_json: Path
-    manifest_with_testcase_flows_xml: Path
-    testcase_flow_summary_json: Path
     infer_summary_json: Path
     trace_strict_jsonl: Path
-    pairs_jsonl: Path
-    leftover_counterparts_jsonl: Path
-    paired_signatures_dir: Path
-    paired_trace_summary_json: Path
-    train_patched_counterparts_pairs_jsonl: Path
-    train_patched_counterparts_signatures_dir: Path
-    train_patched_counterparts_selection_summary_json: Path
-    slice_dir: Path
-    slice_summary_json: Path
-    train_patched_counterparts_slice_stage_dir: Path
-    train_patched_counterparts_slice_dir: Path
-    train_patched_counterparts_slice_summary_json: Path
-    normalized_slices_dir: Path
-    real_vul_data_csv: Path
-    real_vul_data_dedup_dropped_csv: Path
-    normalized_token_counts_csv: Path
-    slice_token_distribution_png: Path
-    dataset_split_manifest_json: Path
-    dataset_summary_json: Path
-    train_patched_counterparts_csv: Path
-    train_patched_counterparts_dedup_dropped_csv: Path
-    train_patched_counterparts_slices_dir: Path
-    train_patched_counterparts_token_counts_csv: Path
-    train_patched_counterparts_token_distribution_png: Path
-    train_patched_counterparts_split_manifest_json: Path
-    train_patched_counterparts_summary_json: Path
     run_summary_path: Path
     source_testcases_root: Path
-
-    def __getitem__(self, key: str) -> Path:
-        return getattr(self, key)
+    stage02b: _stage02b_flow.Stage02BOutputPaths
+    pair: PairTracePaths
+    slices: SliceStagePaths
+    dataset: DatasetExportPaths
+    patched_pair: PatchedPairingPaths
+    patched_slices: SliceStagePaths
+    patched_dataset: DatasetExportPaths
 
 
 def _print_result(result: Any) -> int:
+    if hasattr(result, 'to_payload'):
+        result = result.to_payload()
     if isinstance(result, dict):
         print(json.dumps(result, ensure_ascii=False, indent=2))
         return 0
@@ -238,7 +212,7 @@ def parse_args() -> argparse.Namespace:
     stage07b.add_argument(
         '--pipeline-root',
         type=Path,
-        default=Path(_stage07b_patched_export.RESULT_DIR) / 'pipeline-runs',
+        default=Path(RESULT_DIR) / 'pipeline-runs',
     )
     stage07b.add_argument('--dedup-mode', choices=['none', 'row'], default='row')
     stage07b.add_argument('--overwrite', action='store_true')
@@ -276,25 +250,19 @@ def _build_full_run_paths(*, run_dir: Path, source_root: Path) -> FullRunPaths:
     infer_results_root = run_dir / '03_infer-results'
     signatures_root = run_dir / '03_signatures'
     trace_dir = run_dir / '04_trace_flow'
-    pair_dir = run_dir / '05_pair_trace_ds'
-    slice_stage_dir = run_dir / '06_slices'
-    dataset_stage_dir = run_dir / '07_dataset_export'
     logs_dir = run_dir / 'logs'
-    train_patched_counterparts_slice_stage_dir = (
-        slice_stage_dir / TRAIN_PATCHED_COUNTERPARTS_BASENAME
-    )
-    pair_trace_paths = build_pair_trace_paths(pair_dir)
-    slice_stage_paths = build_slice_stage_paths(slice_stage_dir)
-    train_patched_slice_stage_paths = build_slice_stage_paths(
-        train_patched_counterparts_slice_stage_dir
-    )
-    primary_dataset_paths = build_dataset_export_paths(dataset_stage_dir)
-    train_patched_counterparts_paths = build_patched_pairing_paths(
-        pair_dir,
+    pair_paths = build_pair_trace_paths(run_dir / '05_pair_trace_ds')
+    slice_paths = build_slice_stage_paths(run_dir / '06_slices')
+    dataset_paths = build_dataset_export_paths(run_dir / '07_dataset_export')
+    patched_pair_paths = build_patched_pairing_paths(
+        pair_paths.output_dir,
         TRAIN_PATCHED_COUNTERPARTS_BASENAME,
     )
-    train_patched_dataset_paths = build_dataset_export_paths(
-        dataset_stage_dir,
+    patched_slice_paths = build_slice_stage_paths(
+        slice_paths.output_dir / TRAIN_PATCHED_COUNTERPARTS_BASENAME
+    )
+    patched_dataset_paths = build_dataset_export_paths(
+        dataset_paths.output_dir,
         TRAIN_PATCHED_COUNTERPARTS_BASENAME,
     )
     stage02b_output_paths = _stage02b_flow.build_stage02b_output_paths(flow_dir)
@@ -307,61 +275,20 @@ def _build_full_run_paths(*, run_dir: Path, source_root: Path) -> FullRunPaths:
         infer_results_root=infer_results_root,
         signatures_root=signatures_root,
         trace_dir=trace_dir,
-        pair_dir=pair_dir,
-        slice_stage_dir=slice_stage_dir,
-        dataset_stage_dir=dataset_stage_dir,
         logs_dir=logs_dir,
         manifest_with_comments_xml=manifest_dir / 'manifest_with_comments.xml',
         generated_taint_config=taint_dir / 'pulse-taint-config.json',
-        function_names_unique_csv=stage02b_output_paths['function_names_unique_csv'],
-        function_inventory_summary_json=stage02b_output_paths['function_inventory_summary_json'],
-        function_names_categorized_jsonl=stage02b_output_paths['function_names_categorized_jsonl'],
-        grouped_family_role_json=stage02b_output_paths['grouped_family_role_json'],
-        category_summary_json=stage02b_output_paths['category_summary_json'],
-        manifest_with_testcase_flows_xml=stage02b_output_paths['manifest_with_testcase_flows_xml'],
-        testcase_flow_summary_json=stage02b_output_paths['testcase_flow_summary_json'],
         infer_summary_json=run_dir / '03_infer_summary.json',
         trace_strict_jsonl=trace_dir / 'trace_flow_match_strict.jsonl',
-        pairs_jsonl=pair_trace_paths['pairs_jsonl'],
-        leftover_counterparts_jsonl=pair_trace_paths['leftover_counterparts_jsonl'],
-        paired_signatures_dir=pair_trace_paths['paired_signatures_dir'],
-        paired_trace_summary_json=pair_trace_paths['summary_json'],
-        train_patched_counterparts_pairs_jsonl=train_patched_counterparts_paths['pairs_jsonl'],
-        train_patched_counterparts_signatures_dir=train_patched_counterparts_paths[
-            'signatures_dir'
-        ],
-        train_patched_counterparts_selection_summary_json=train_patched_counterparts_paths[
-            'selection_summary_json'
-        ],
-        slice_dir=slice_stage_paths['slice_dir'],
-        slice_summary_json=slice_stage_paths['summary_json'],
-        train_patched_counterparts_slice_stage_dir=train_patched_counterparts_slice_stage_dir,
-        train_patched_counterparts_slice_dir=train_patched_slice_stage_paths['slice_dir'],
-        train_patched_counterparts_slice_summary_json=train_patched_slice_stage_paths[
-            'summary_json'
-        ],
-        normalized_slices_dir=primary_dataset_paths['normalized_slices_dir'],
-        real_vul_data_csv=primary_dataset_paths['csv_path'],
-        real_vul_data_dedup_dropped_csv=primary_dataset_paths['dedup_dropped_csv'],
-        normalized_token_counts_csv=primary_dataset_paths['token_counts_csv'],
-        slice_token_distribution_png=primary_dataset_paths['token_distribution_png'],
-        dataset_split_manifest_json=primary_dataset_paths['split_manifest_json'],
-        dataset_summary_json=primary_dataset_paths['summary_json'],
-        train_patched_counterparts_csv=train_patched_dataset_paths['csv_path'],
-        train_patched_counterparts_dedup_dropped_csv=train_patched_dataset_paths[
-            'dedup_dropped_csv'
-        ],
-        train_patched_counterparts_slices_dir=train_patched_dataset_paths['normalized_slices_dir'],
-        train_patched_counterparts_token_counts_csv=train_patched_dataset_paths['token_counts_csv'],
-        train_patched_counterparts_token_distribution_png=train_patched_dataset_paths[
-            'token_distribution_png'
-        ],
-        train_patched_counterparts_split_manifest_json=train_patched_dataset_paths[
-            'split_manifest_json'
-        ],
-        train_patched_counterparts_summary_json=train_patched_dataset_paths['summary_json'],
         run_summary_path=run_dir / 'run_summary.json',
         source_testcases_root=source_root / 'testcases',
+        stage02b=stage02b_output_paths,
+        pair=pair_paths,
+        slices=slice_paths,
+        dataset=dataset_paths,
+        patched_pair=patched_pair_paths,
+        patched_slices=patched_slice_paths,
+        patched_dataset=patched_dataset_paths,
     )
 
 
@@ -380,6 +307,8 @@ def run_internal_step(
     try:
         with redirect_stdout(stdout_buffer), redirect_stderr(stderr_buffer):
             payload = fn()
+            if hasattr(payload, 'to_payload'):
+                payload = payload.to_payload()
             if isinstance(payload, dict):
                 result_payload = payload
     except Exception as exc:  # pragma: no cover - surfaced to caller
@@ -472,7 +401,7 @@ def _run_checked_stage_call(
 ) -> dict[str, object]:
     return _run_checked_internal_step(
         step_key=step_key,
-        logs_dir=paths['logs_dir'],
+        logs_dir=paths.logs_dir,
         fn=lambda: runner(**runner_kwargs),
         required_outputs=required_outputs,
     )
@@ -494,18 +423,16 @@ def run_step01_manifest_comment_scan(
     manifest: Path,
     source_root: Path,
 ) -> dict[str, object]:
+    output_xml = paths.manifest_with_comments_xml
     return _run_checked_stage_call(
         step_key='01_manifest_comment_scan',
         paths=paths,
         runner=_stage01_manifest.scan_manifest_comments,
         manifest=manifest,
         source_root=source_root,
-        output_xml=paths['manifest_with_comments_xml'],
+        output_xml=output_xml,
         required_outputs=[
-            (
-                paths['manifest_with_comments_xml'],
-                f'Expected manifest_with_comments.xml not found: {paths["manifest_with_comments_xml"]}',
-            )
+            (output_xml, f'Expected manifest_with_comments_xml not found: {output_xml}')
         ],
     )
 
@@ -519,92 +446,54 @@ def run_step02a_code_field_inventory(
         step_key='02a_code_field_inventory',
         paths=paths,
         runner=_stage02a_taint.extract_unique_code_fields,
-        input_xml=paths['manifest_with_comments_xml'],
+        input_xml=paths.manifest_with_comments_xml,
         source_root=source_root,
-        output_dir=paths['taint_dir'],
-        pulse_taint_config_output=paths['generated_taint_config'],
+        output_dir=paths.taint_dir,
+        pulse_taint_config_output=paths.generated_taint_config,
         required_outputs=[
             (
-                paths['generated_taint_config'],
-                f'Expected generated taint config not found: {paths["generated_taint_config"]}',
+                paths.generated_taint_config,
+                f'Expected generated_taint_config not found: {paths.generated_taint_config}',
             )
         ],
     )
 
 
 def run_step02b_flow_build(*, paths: FullRunPaths) -> dict[str, dict[str, object]]:
-    stage02b_output_paths = _stage02b_flow.build_stage02b_output_paths(paths['flow_dir'])
+    stage02b_output_paths = paths.stage02b
     results: dict[str, dict[str, object]] = {}
     results['02b_function_inventory_extract'] = run_internal_step(
         '02b_function_inventory_extract',
-        logs_dir=paths['logs_dir'],
+        logs_dir=paths.logs_dir,
         fn=lambda: _stage02b_flow.extract_function_inventory(
-            input_xml=paths['manifest_with_comments_xml'],
-            output_csv=stage02b_output_paths['function_names_unique_csv'],
-            output_summary=stage02b_output_paths['function_inventory_summary_json'],
+            input_xml=paths.manifest_with_comments_xml,
+            output_csv=stage02b_output_paths.function_names_unique_csv,
+            output_summary=stage02b_output_paths.function_inventory_summary_json,
         ),
     )
     results['02b_function_inventory_categorize'] = run_internal_step(
         '02b_function_inventory_categorize',
-        logs_dir=paths['logs_dir'],
+        logs_dir=paths.logs_dir,
         fn=lambda: _stage02b_flow.categorize_function_names(
-            input_csv=stage02b_output_paths['function_names_unique_csv'],
-            manifest_xml=paths['manifest_with_comments_xml'],
-            source_root=paths['source_testcases_root'],
-            output_jsonl=stage02b_output_paths['function_names_categorized_jsonl'],
-            output_nested_json=stage02b_output_paths['grouped_family_role_json'],
-            output_summary=stage02b_output_paths['category_summary_json'],
+            input_csv=stage02b_output_paths.function_names_unique_csv,
+            manifest_xml=paths.manifest_with_comments_xml,
+            source_root=paths.source_testcases_root,
+            output_jsonl=stage02b_output_paths.function_names_categorized_jsonl,
+            output_nested_json=stage02b_output_paths.grouped_family_role_json,
+            output_summary=stage02b_output_paths.category_summary_json,
         ),
     )
     results['02b_testcase_flow_partition'] = run_internal_step(
         '02b_testcase_flow_partition',
-        logs_dir=paths['logs_dir'],
+        logs_dir=paths.logs_dir,
         fn=lambda: _stage02b_flow.add_flow_tags_to_testcase(
-            input_xml=paths['manifest_with_comments_xml'],
-            function_categories_jsonl=stage02b_output_paths['function_names_categorized_jsonl'],
-            output_xml=stage02b_output_paths['manifest_with_testcase_flows_xml'],
-            summary_json=stage02b_output_paths['testcase_flow_summary_json'],
+            input_xml=paths.manifest_with_comments_xml,
+            function_categories_jsonl=stage02b_output_paths.function_names_categorized_jsonl,
+            output_xml=stage02b_output_paths.manifest_with_testcase_flows_xml,
+            summary_json=stage02b_output_paths.testcase_flow_summary_json,
         ),
     )
-
-    required_outputs = [
-        (
-            stage02b_output_paths['function_names_unique_csv'],
-            'Expected function inventory CSV not found: '
-            f'{stage02b_output_paths["function_names_unique_csv"]}',
-        ),
-        (
-            stage02b_output_paths['function_inventory_summary_json'],
-            'Expected function inventory summary not found: '
-            f'{stage02b_output_paths["function_inventory_summary_json"]}',
-        ),
-        (
-            stage02b_output_paths['function_names_categorized_jsonl'],
-            'Expected categorized functions JSONL not found: '
-            f'{stage02b_output_paths["function_names_categorized_jsonl"]}',
-        ),
-        (
-            stage02b_output_paths['grouped_family_role_json'],
-            'Expected grouped family role JSON not found: '
-            f'{stage02b_output_paths["grouped_family_role_json"]}',
-        ),
-        (
-            stage02b_output_paths['category_summary_json'],
-            f'Expected category summary JSON not found: {stage02b_output_paths["category_summary_json"]}',
-        ),
-        (
-            stage02b_output_paths['manifest_with_testcase_flows_xml'],
-            'Expected manifest_with_testcase_flows.xml not found: '
-            f'{stage02b_output_paths["manifest_with_testcase_flows_xml"]}',
-        ),
-        (
-            stage02b_output_paths['testcase_flow_summary_json'],
-            'Expected testcase flow summary JSON not found: '
-            f'{stage02b_output_paths["testcase_flow_summary_json"]}',
-        ),
-    ]
-    _require_all(required_outputs)
-
+    _require_all(stage02b_output_paths.required_outputs())
     return results
 
 
@@ -618,28 +507,28 @@ def run_step03_infer_and_signature(
 ) -> tuple[dict[str, object], dict[str, object], Path]:
     result = run_internal_step(
         '03_infer_and_signature',
-        logs_dir=paths['logs_dir'],
+        logs_dir=paths.logs_dir,
         fn=lambda: _stage03_infer.run_infer_and_signature(
             cwes=cwes,
             global_result=False,
             all_cwes=all_cwes,
             files=files,
             pulse_taint_config=selected_taint_config,
-            infer_results_root=paths['infer_results_root'],
-            signatures_root=paths['signatures_root'],
-            summary_json=paths['infer_summary_json'],
+            infer_results_root=paths.infer_results_root,
+            signatures_root=paths.signatures_root,
+            summary_json=paths.infer_summary_json,
         ),
     )
 
     _require_all(
         [
             (
-                paths['infer_summary_json'],
-                f'Infer summary JSON not found: {paths["infer_summary_json"]}',
+                paths.infer_summary_json,
+                f'Infer summary JSON not found: {paths.infer_summary_json}',
             )
         ]
     )
-    infer_summary = json.loads(paths['infer_summary_json'].read_text(encoding='utf-8'))
+    infer_summary = json.loads(paths.infer_summary_json.read_text(encoding='utf-8'))
 
     signature_non_empty_raw = infer_summary.get('signature_non_empty_dir')
     if signature_non_empty_raw:
@@ -671,13 +560,13 @@ def run_step04_trace_flow(
         step_key='04_trace_flow_filter',
         paths=paths,
         runner=_stage04_trace_flow.filter_traces_by_flow,
-        flow_xml=paths['manifest_with_testcase_flows_xml'],
+        flow_xml=paths.stage02b.manifest_with_testcase_flows_xml,
         signatures_dir=signature_non_empty_dir,
-        output_dir=paths['trace_dir'],
+        output_dir=paths.trace_dir,
         required_outputs=[
             (
-                paths['trace_strict_jsonl'],
-                f'Expected strict trace output not found: {paths["trace_strict_jsonl"]}',
+                paths.trace_strict_jsonl,
+                f'Expected trace_flow_match_strict_jsonl not found: {paths.trace_strict_jsonl}',
             )
         ],
     )
@@ -688,21 +577,11 @@ def run_step05_pair_trace(*, paths: FullRunPaths) -> dict[str, object]:
         step_key='05_pair_trace_dataset',
         paths=paths,
         runner=_stage05_pair_trace.build_paired_trace_dataset,
-        trace_jsonl=paths['trace_strict_jsonl'],
-        output_dir=paths['pair_dir'],
+        trace_jsonl=paths.trace_strict_jsonl,
+        output_dir=paths.pair.output_dir,
         overwrite=False,
-        run_dir=paths['run_dir'],
-        required_outputs=[
-            (paths['pairs_jsonl'], f'Expected pairs output not found: {paths["pairs_jsonl"]}'),
-            (
-                paths['paired_signatures_dir'],
-                f'Expected paired signatures dir not found: {paths["paired_signatures_dir"]}',
-            ),
-            (
-                paths['paired_trace_summary_json'],
-                f'Expected paired trace summary not found: {paths["paired_trace_summary_json"]}',
-            ),
-        ],
+        run_dir=paths.run_dir,
+        required_outputs=paths.pair.required_outputs(),
     )
 
 
@@ -711,17 +590,11 @@ def run_step06_slices(*, paths: FullRunPaths) -> dict[str, object]:
         step_key='06_generate_slices',
         paths=paths,
         runner=_stage06_slices.generate_slices,
-        signature_db_dir=paths['paired_signatures_dir'],
-        output_dir=paths['slice_stage_dir'],
+        signature_db_dir=paths.pair.paired_signatures_dir,
+        output_dir=paths.slices.output_dir,
         overwrite=False,
-        run_dir=paths['run_dir'],
-        required_outputs=[
-            (paths['slice_dir'], f'Expected slice dir not found: {paths["slice_dir"]}'),
-            (
-                paths['slice_summary_json'],
-                f'Expected slice summary not found: {paths["slice_summary_json"]}',
-            ),
-        ],
+        run_dir=paths.run_dir,
+        required_outputs=paths.slices.required_outputs(),
     )
 
 
@@ -737,46 +610,15 @@ def run_step07_dataset_export(
         paths=paths,
         runner=export_primary_dataset,
         params=PrimaryDatasetExportParams(
-            pairs_jsonl=paths['pairs_jsonl'],
-            paired_signatures_dir=paths['paired_signatures_dir'],
-            slice_dir=paths['slice_dir'],
-            output_dir=paths['dataset_stage_dir'],
+            pairs_jsonl=paths.pair.pairs_jsonl,
+            paired_signatures_dir=paths.pair.paired_signatures_dir,
+            slice_dir=paths.slices.slice_dir,
+            output_dir=paths.dataset.output_dir,
             split_seed=pair_split_seed,
             train_ratio=pair_train_ratio,
             dedup_mode=dedup_mode,
         ),
-        required_outputs=[
-            (
-                paths['normalized_slices_dir'],
-                f'Expected normalized slices dir not found: {paths["normalized_slices_dir"]}',
-            ),
-            (
-                paths['real_vul_data_csv'],
-                f'Expected Real_Vul_data.csv not found: {paths["real_vul_data_csv"]}',
-            ),
-            (
-                paths['real_vul_data_dedup_dropped_csv'],
-                'Expected Real_Vul_data dedup dropped CSV not found: '
-                f'{paths["real_vul_data_dedup_dropped_csv"]}',
-            ),
-            (
-                paths['normalized_token_counts_csv'],
-                'Expected normalized token counts CSV not found: '
-                f'{paths["normalized_token_counts_csv"]}',
-            ),
-            (
-                paths['slice_token_distribution_png'],
-                f'Expected token distribution plot not found: {paths["slice_token_distribution_png"]}',
-            ),
-            (
-                paths['dataset_split_manifest_json'],
-                f'Expected dataset split manifest not found: {paths["dataset_split_manifest_json"]}',
-            ),
-            (
-                paths['dataset_summary_json'],
-                f'Expected dataset summary JSON not found: {paths["dataset_summary_json"]}',
-            ),
-        ],
+        required_outputs=paths.dataset.required_outputs(),
     )
 
 
@@ -785,85 +627,29 @@ def run_step07b_train_patched_counterparts(
     paths: FullRunPaths,
     dedup_mode: str,
 ) -> dict[str, object]:
+    required_outputs = (
+        paths.patched_pair.required_outputs(prefix='pairing_')
+        + paths.patched_slices.required_outputs(prefix='slices_')
+        + paths.patched_dataset.required_outputs(prefix='dataset_')
+    )
     return _run_checked_stage_call(
         step_key='07b_train_patched_counterparts_export',
         paths=paths,
         runner=export_patched_dataset,
         params=PatchedDatasetExportParams(
-            run_dir=paths['run_dir'],
-            pair_dir=paths['pair_dir'],
-            dataset_export_dir=paths['dataset_stage_dir'],
-            signature_output_dir=paths['train_patched_counterparts_signatures_dir'],
-            slice_output_dir=paths['train_patched_counterparts_slice_stage_dir'],
-            output_pairs_jsonl=paths['train_patched_counterparts_pairs_jsonl'],
-            selection_summary_json=paths['train_patched_counterparts_selection_summary_json'],
+            run_dir=paths.run_dir,
+            pair_dir=paths.pair.output_dir,
+            dataset_export_dir=paths.dataset.output_dir,
+            signature_output_dir=paths.patched_pair.signatures_dir,
+            slice_output_dir=paths.patched_slices.output_dir,
+            output_pairs_jsonl=paths.patched_pair.pairs_jsonl,
+            selection_summary_json=paths.patched_pair.selection_summary_json,
             dedup_mode=dedup_mode,
             overwrite=False,
             old_prefix=None,
             new_prefix=None,
         ),
-        required_outputs=[
-            (
-                paths['train_patched_counterparts_pairs_jsonl'],
-                'Expected train_patched_counterparts pairs output not found: '
-                f'{paths["train_patched_counterparts_pairs_jsonl"]}',
-            ),
-            (
-                paths['train_patched_counterparts_signatures_dir'],
-                'Expected train_patched_counterparts signatures dir not found: '
-                f'{paths["train_patched_counterparts_signatures_dir"]}',
-            ),
-            (
-                paths['train_patched_counterparts_selection_summary_json'],
-                'Expected train_patched_counterparts selection summary not found: '
-                f'{paths["train_patched_counterparts_selection_summary_json"]}',
-            ),
-            (
-                paths['train_patched_counterparts_slice_dir'],
-                'Expected train_patched_counterparts slice dir not found: '
-                f'{paths["train_patched_counterparts_slice_dir"]}',
-            ),
-            (
-                paths['train_patched_counterparts_slice_summary_json'],
-                'Expected train_patched_counterparts slice summary not found: '
-                f'{paths["train_patched_counterparts_slice_summary_json"]}',
-            ),
-            (
-                paths['train_patched_counterparts_csv'],
-                'Expected train_patched_counterparts CSV not found: '
-                f'{paths["train_patched_counterparts_csv"]}',
-            ),
-            (
-                paths['train_patched_counterparts_dedup_dropped_csv'],
-                'Expected train_patched_counterparts dedup dropped CSV not found: '
-                f'{paths["train_patched_counterparts_dedup_dropped_csv"]}',
-            ),
-            (
-                paths['train_patched_counterparts_slices_dir'],
-                'Expected train_patched_counterparts slices dir not found: '
-                f'{paths["train_patched_counterparts_slices_dir"]}',
-            ),
-            (
-                paths['train_patched_counterparts_token_counts_csv'],
-                'Expected train_patched_counterparts token counts CSV not found: '
-                f'{paths["train_patched_counterparts_token_counts_csv"]}',
-            ),
-            (
-                paths['train_patched_counterparts_token_distribution_png'],
-                'Expected train_patched_counterparts token distribution plot not found: '
-                f'{paths["train_patched_counterparts_token_distribution_png"]}',
-            ),
-            (
-                paths['train_patched_counterparts_split_manifest_json'],
-                'Expected train_patched_counterparts split manifest not found: '
-                f'{paths["train_patched_counterparts_split_manifest_json"]}',
-            ),
-            (
-                paths['train_patched_counterparts_summary_json'],
-                'Expected train_patched_counterparts summary JSON not found: '
-                f'{paths["train_patched_counterparts_summary_json"]}',
-            ),
-        ],
+        required_outputs=required_outputs,
     )
 
 
@@ -893,7 +679,7 @@ def _build_run_summary_payload(
     signature_non_empty_dir: Optional[Path],
 ) -> dict[str, object]:
     committed_taint_config = committed_taint_config.resolve()
-    generated_taint_config = paths['generated_taint_config'].resolve()
+    generated_taint_config = paths.generated_taint_config.resolve()
     selected_taint_config_str = (
         str(selected_taint_config.resolve()) if selected_taint_config is not None else None
     )
@@ -904,87 +690,70 @@ def _build_run_summary_payload(
         'started_at': started_at,
         'ended_at': ended_at,
         'duration_sec': total_duration_sec,
-        'pipeline_root': str(pipeline_root),
-        'run_id': run_id,
-        'run_dir': str(paths['run_dir']),
-        'input_manifest': str(manifest.resolve()),
-        'source_root': str(source_root.resolve()),
-        'mode': 'files' if files else ('all' if all_cwes else 'cwes'),
-        'all_cwes': all_cwes,
-        'cwes': cwes or [],
-        'files': files,
-        'pair_split_seed': pair_split_seed,
-        'pair_train_ratio': pair_train_ratio,
-        'dedup_mode': dedup_mode,
-        'committed_taint_config_path': str(committed_taint_config),
-        'generated_taint_config_path': str(generated_taint_config),
-        'selected_taint_config_path': selected_taint_config_str,
-        'selected_reason': selected_reason,
-        'sha256': {
-            'committed_taint_config': sha256_file(committed_taint_config),
-            'generated_taint_config': sha256_file(generated_taint_config),
-            'selected_taint_config': sha256_file(Path(selected_taint_config_str))
-            if selected_taint_config_str
-            else None,
+        'run': {
+            'pipeline_root': str(pipeline_root),
+            'run_id': run_id,
+            'run_dir': str(paths.run_dir),
+        },
+        'inputs': {
+            'manifest': str(manifest.resolve()),
+            'source_root': str(source_root.resolve()),
+            'mode': 'files' if files else ('all' if all_cwes else 'cwes'),
+            'all_cwes': all_cwes,
+            'cwes': cwes or [],
+            'files': files,
+        },
+        'config': {
+            'pair_split_seed': pair_split_seed,
+            'pair_train_ratio': pair_train_ratio,
+            'dedup_mode': dedup_mode,
+            'taint_config': {
+                'committed_path': str(committed_taint_config),
+                'generated_path': str(generated_taint_config),
+                'selected_path': selected_taint_config_str,
+                'selected_reason': selected_reason,
+                'sha256': {
+                    'committed_taint_config': sha256_file(committed_taint_config),
+                    'generated_taint_config': sha256_file(generated_taint_config),
+                    'selected_taint_config': sha256_file(Path(selected_taint_config_str))
+                    if selected_taint_config_str
+                    else None,
+                },
+            },
         },
         'steps': steps,
         'outputs': {
-            'manifest_with_comments_xml': str(paths['manifest_with_comments_xml']),
-            'generated_taint_config': str(paths['generated_taint_config']),
-            'manifest_with_testcase_flows_xml': str(paths['manifest_with_testcase_flows_xml']),
-            'infer_summary_json': str(paths['infer_summary_json']),
-            'signature_non_empty_dir': str(signature_non_empty_dir)
-            if signature_non_empty_dir is not None
-            else None,
-            'trace_flow_match_strict_jsonl': str(paths['trace_strict_jsonl']),
-            'pairs_jsonl': str(paths['pairs_jsonl']),
-            'leftover_counterparts_jsonl': str(paths['leftover_counterparts_jsonl']),
-            'paired_signatures_dir': str(paths['paired_signatures_dir']),
-            'paired_trace_summary_json': str(paths['paired_trace_summary_json']),
-            'train_patched_counterparts_pairs_jsonl': str(
-                paths['train_patched_counterparts_pairs_jsonl']
+            'stage01': {
+                'output_dir': str(paths.manifest_dir),
+                'manifest_with_comments_xml': str(paths.manifest_with_comments_xml),
+            },
+            'stage02a': {
+                'output_dir': str(paths.taint_dir),
+                'generated_taint_config': str(paths.generated_taint_config),
+            },
+            'stage02b': paths.stage02b.to_payload(
+                include=('output_dir', *paths.stage02b._required_fields),
             ),
-            'train_patched_counterparts_signatures_dir': str(
-                paths['train_patched_counterparts_signatures_dir']
-            ),
-            'train_patched_counterparts_selection_summary_json': str(
-                paths['train_patched_counterparts_selection_summary_json']
-            ),
-            'slice_dir': str(paths['slice_dir']),
-            'slice_summary_json': str(paths['slice_summary_json']),
-            'train_patched_counterparts_slice_dir': str(
-                paths['train_patched_counterparts_slice_dir']
-            ),
-            'train_patched_counterparts_slice_summary_json': str(
-                paths['train_patched_counterparts_slice_summary_json']
-            ),
-            'dataset_export_dir': str(paths['dataset_stage_dir']),
-            'normalized_slices_dir': str(paths['normalized_slices_dir']),
-            'real_vul_data_csv': str(paths['real_vul_data_csv']),
-            'real_vul_data_dedup_dropped_csv': str(paths['real_vul_data_dedup_dropped_csv']),
-            'normalized_token_counts_csv': str(paths['normalized_token_counts_csv']),
-            'slice_token_distribution_png': str(paths['slice_token_distribution_png']),
-            'dataset_split_manifest_json': str(paths['dataset_split_manifest_json']),
-            'dataset_summary_json': str(paths['dataset_summary_json']),
-            'train_patched_counterparts_csv': str(paths['train_patched_counterparts_csv']),
-            'train_patched_counterparts_dedup_dropped_csv': str(
-                paths['train_patched_counterparts_dedup_dropped_csv']
-            ),
-            'train_patched_counterparts_slices_dir': str(
-                paths['train_patched_counterparts_slices_dir']
-            ),
-            'train_patched_counterparts_token_counts_csv': str(
-                paths['train_patched_counterparts_token_counts_csv']
-            ),
-            'train_patched_counterparts_token_distribution_png': str(
-                paths['train_patched_counterparts_token_distribution_png']
-            ),
-            'train_patched_counterparts_split_manifest_json': str(
-                paths['train_patched_counterparts_split_manifest_json']
-            ),
-            'train_patched_counterparts_summary_json': str(
-                paths['train_patched_counterparts_summary_json']
-            ),
+            'stage03': {
+                'infer_results_root': str(paths.infer_results_root),
+                'signatures_root': str(paths.signatures_root),
+                'infer_summary_json': str(paths.infer_summary_json),
+                'signature_non_empty_dir': str(signature_non_empty_dir)
+                if signature_non_empty_dir is not None
+                else None,
+            },
+            'stage04': {
+                'output_dir': str(paths.trace_dir),
+                'trace_flow_match_strict_jsonl': str(paths.trace_strict_jsonl),
+            },
+            'stage05': paths.pair.to_payload(),
+            'stage06': paths.slices.to_payload(),
+            'stage07': paths.dataset.to_payload(),
+            'stage07b': {
+                'pairing': paths.patched_pair.to_payload(),
+                'slices': paths.patched_slices.to_payload(),
+                'dataset': paths.patched_dataset.to_payload(),
+            },
         },
         'infer_summary': infer_summary,
     }
@@ -1050,7 +819,7 @@ def run_full_pipeline(
         steps.update(run_step02b_flow_build(paths=paths))
 
         selected_taint_config, selected_reason = _select_taint_config(
-            generated_taint_config=paths['generated_taint_config'],
+            generated_taint_config=paths.generated_taint_config,
             committed_taint_config=committed_taint_config,
         )
         (
@@ -1111,7 +880,7 @@ def run_full_pipeline(
         infer_summary=infer_summary,
         signature_non_empty_dir=signature_non_empty_dir,
     )
-    write_json(paths['run_summary_path'], summary_payload)
+    write_json(paths.run_summary_path, summary_payload)
 
     print(json.dumps(summary_payload, ensure_ascii=False))
     return 0 if status == 'success' else 1
@@ -1182,12 +951,11 @@ def main() -> int:
         )
 
     if args.command == 'stage03-signature':
-        return int(
-            _stage03_signature.main(
+        return _print_result(
+            _stage03_signature.run_signature_generation(
                 input_dir=args.input_dir,
                 output_root=args.output_root,
             )
-            or 0
         )
 
     if args.command == 'stage04':
@@ -1258,46 +1026,34 @@ def main() -> int:
             pipeline_root=args.pipeline_root,
         )
         _stage07b_patched_export.validate_args(
-            pair_dir=paths['pair_dir'],
-            dataset_export_dir=paths['dataset_export_dir'],
+            paths,
             old_prefix=args.old_prefix,
             new_prefix=args.new_prefix,
         )
-        run_dir = paths['run_dir']
-        pair_dir = paths['pair_dir']
-        dataset_export_dir = paths['dataset_export_dir']
-        signature_output_dir = paths['signature_output_dir']
-        slice_output_dir = paths['slice_output_dir']
-        if (
-            run_dir is None
-            or pair_dir is None
-            or dataset_export_dir is None
-            or signature_output_dir is None
-            or slice_output_dir is None
-        ):
+        if paths.run_dir is None:
             raise ValueError('Failed to resolve required stage07b paths.')
         patched_pairing_paths = build_patched_pairing_paths(
-            pair_dir,
+            paths.pair_dir,
             _stage07b_patched_export.DATASET_BASENAME,
         )
         output_pairs_jsonl = (
             args.output_pairs_jsonl.resolve()
             if args.output_pairs_jsonl is not None
-            else patched_pairing_paths['pairs_jsonl']
+            else patched_pairing_paths.pairs_jsonl
         )
         selection_summary_json = (
             args.selection_summary_json.resolve()
             if args.selection_summary_json is not None
-            else patched_pairing_paths['selection_summary_json']
+            else patched_pairing_paths.selection_summary_json
         )
         return _print_result(
             _stage07b_patched_export.export_patched_dataset(
                 _stage07b_patched_export.PatchedDatasetExportParams(
-                    run_dir=run_dir,
-                    pair_dir=pair_dir,
-                    dataset_export_dir=dataset_export_dir,
-                    signature_output_dir=signature_output_dir,
-                    slice_output_dir=slice_output_dir,
+                    run_dir=paths.run_dir,
+                    pair_dir=paths.pair_dir,
+                    dataset_export_dir=paths.dataset_export_dir,
+                    signature_output_dir=paths.signature_output_dir,
+                    slice_output_dir=paths.slice_output_dir,
                     output_pairs_jsonl=output_pairs_jsonl,
                     selection_summary_json=selection_summary_json,
                     dedup_mode=args.dedup_mode,

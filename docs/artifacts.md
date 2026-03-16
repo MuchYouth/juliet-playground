@@ -121,8 +121,8 @@ artifacts/pipeline-runs/run-YYYY.MM.DD-HH:MM:SS/
 ## 핵심 summary / log 파일
 
 - `run_summary.json`
-  - run의 mode, 선택된 taint config, step별 stdout/stderr 로그 경로,
-    대표 산출물 경로, infer summary를 포함
+  - `run`, `inputs`, `config`, `steps`, `outputs`, `infer_summary` 의 nested 구조를 사용
+  - 선택된 taint config, step별 stdout/stderr 로그 경로, stage별 대표 산출물 경로를 포함
 - `03_infer_summary.json`
   - Infer run 디렉터리, signature 출력 경로, 결과 CSV/텍스트, target별 통계를 포함
 - `04_trace_flow/summary.json`

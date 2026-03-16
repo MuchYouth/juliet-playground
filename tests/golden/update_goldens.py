@@ -132,7 +132,7 @@ def write_manifest_subset(input_manifest: Path, output_manifest: Path) -> None:
 
 def copy_signature_subset(source_run: Path, destination: Path) -> None:
     run_summary = json.loads((source_run / 'run_summary.json').read_text(encoding='utf-8'))
-    signature_non_empty_dir = Path(run_summary['outputs']['signature_non_empty_dir'])
+    signature_non_empty_dir = Path(run_summary['outputs']['stage03']['signature_non_empty_dir'])
     ensure_clean_dir(destination)
     for testcase_key in SELECTED_TESTCASE_KEYS:
         src = signature_non_empty_dir / testcase_key
@@ -477,8 +477,8 @@ def main() -> int:
         raise FileNotFoundError(f'Source run not found: {source_run}')
 
     run_summary = json.loads((source_run / 'run_summary.json').read_text(encoding='utf-8'))
-    input_manifest = Path(run_summary['input_manifest'])
-    source_root = Path(run_summary['source_root'])
+    input_manifest = Path(run_summary['inputs']['manifest'])
+    source_root = Path(run_summary['inputs']['source_root'])
 
     if not input_manifest.exists():
         raise FileNotFoundError(f'Input manifest not found: {input_manifest}')
