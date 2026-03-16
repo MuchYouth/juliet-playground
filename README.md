@@ -21,6 +21,27 @@ paired trace → slice → dataset export까지 이어지는 실험 저장소입
 - Step 04 (`trace flow filter`):
   [`experiments/epic001d_trace_flow_filter/README.md`](experiments/epic001d_trace_flow_filter/README.md)
 
+## 코드 구조 원칙
+
+- `tools/`
+  - 사람이 직접 실행하는 CLI entrypoint와 독립 유틸리티를 둡니다.
+  - hyphenated filename은 CLI entrypoint에만 사용합니다.
+- `tools/stage/`
+  - 파이프라인 단계의 실제 구현을 둡니다.
+  - 특정 단계의 계약, output schema, runner 로직을 직접 구현하는 코드는 여기에 둡니다.
+- `tools/shared/`
+  - 여러 단계/CLI가 함께 쓰는 공통 helper만 둡니다.
+  - path/fs/json/signature/trace/source-analysis 같은 공통 로직은 여기에 둡니다.
+- `experiments/`
+  - stage-specific notes, 실험 스크립트, 보조 분석 코드를 둡니다.
+  - 실험이 정착되면 구현은 `tools/stage/` 또는 `tools/shared/`로 승격하고, `experiments/`에는 문서/보조 스크립트만 남기는 쪽을 기본으로 봅니다.
+
+판단 기준은 간단합니다.
+
+- 한 단계의 계약을 직접 구현하면 `tools/stage/`
+- 둘 이상이 재사용하면 `tools/shared/`
+- 사람이 직접 실행하면 `tools/`
+
 ## Quick Start
 
 ### 1) 환경 설정 (최초 1회)

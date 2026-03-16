@@ -16,6 +16,26 @@ This repository runs Infer on the Juliet C/C++ test suite and maintains the pipe
 - `config/`: committed configuration, including `pulse-taint-config.json`.
 - `artifacts/`: generated outputs only. Juliet sources live under `juliet-test-suite-v1.3/C/`.
 
+## Tool Layout Rules
+- Put **CLI entrypoints / wrappers / standalone utilities** in `tools/`.
+- Put **pipeline step implementations** in `tools/stage/`.
+- Put **shared helpers used by multiple stages or CLIs** in `tools/shared/`.
+
+Use these decision rules:
+- If the code directly implements one stage's contract, output schema, or runner behavior, it belongs in `tools/stage/`.
+- If the code is reused by 2+ stages/CLIs and does not define a stage contract by itself, it belongs in `tools/shared/`.
+- If the code is mainly there so a user can run a command, it belongs in `tools/`.
+
+Do not:
+- put generic helpers such as path/fs/json/signature/trace utilities into `tools/stage/`
+- put stage-specific orchestration or output-producing logic into `tools/shared/`
+- add new hyphenated module filenames except for CLI entrypoints
+
+When in doubt:
+- stage-specific beats shared
+- shared must justify itself via reuse
+- wrappers in `tools/` should stay thin
+
 ## Minimal Change Rule
 Keep code changes minimal.
 
