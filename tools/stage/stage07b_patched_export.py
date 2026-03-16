@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Any
 
 from shared import fs as _fs_utils
-from shared.dataset_export_core import run_step07_export_core
+from shared.dataset_export_core import run_step07_export_core, run_step07_export_wrapper
 from shared.dataset_sources import build_source_file_candidates, collect_defined_function_names
 from shared.jsonio import load_jsonl
 from shared.paths import RESULT_DIR
@@ -393,51 +393,22 @@ def export_dataset(
     overwrite: bool,
     dedup_mode: str,
 ) -> dict[str, Any]:
-    if not paired_signatures_dir.exists():
-        raise FileNotFoundError(f'Paired signatures dir not found: {paired_signatures_dir}')
-    if not slice_dir.exists():
-        raise FileNotFoundError(f'Slice dir not found: {slice_dir}')
-    if dedup_mode not in {'none', 'row'}:
-        raise ValueError(f'Unsupported dedup_mode: {dedup_mode}')
-
-    csv_path = dataset_export_dir / f'{DATASET_BASENAME}.csv'
-    dedup_dropped_csv = dataset_export_dir / f'{DATASET_BASENAME}_dedup_dropped.csv'
-    normalized_slices_dir = dataset_export_dir / f'{DATASET_BASENAME}_slices'
-    token_counts_csv = dataset_export_dir / f'{DATASET_BASENAME}_token_counts.csv'
-    token_distribution_png = dataset_export_dir / f'{DATASET_BASENAME}_token_distribution.png'
-    split_manifest_json = dataset_export_dir / f'{DATASET_BASENAME}_split_manifest.json'
-    summary_json = dataset_export_dir / f'{DATASET_BASENAME}_summary.json'
-
-    for target in [
-        csv_path,
-        dedup_dropped_csv,
-        normalized_slices_dir,
-        token_counts_csv,
-        token_distribution_png,
-        split_manifest_json,
-        summary_json,
-    ]:
-        prepare_target(target, overwrite=overwrite)
-
-    return run_step07_export_core(
+    return run_step07_export_wrapper(
         pairs=pairs,
         paired_signatures_dir=paired_signatures_dir,
         slice_dir=slice_dir,
-        csv_path=csv_path,
-        dedup_dropped_csv=dedup_dropped_csv,
-        normalized_slices_dir=normalized_slices_dir,
-        token_counts_csv=token_counts_csv,
-        token_distribution_png=token_distribution_png,
-        split_manifest_json=split_manifest_json,
-        summary_json=summary_json,
+        output_dir=dataset_export_dir,
         dedup_mode=dedup_mode,
+        dataset_basename=DATASET_BASENAME,
+        prepare_target_fn=prepare_target,
+        overwrite=overwrite,
         split_assignments_fn=lambda pair_ids: {pair_id: 'train_val' for pair_id in pair_ids},
         summary_metadata={
             'dataset_basename': DATASET_BASENAME,
             'paired_signatures_dir': str(paired_signatures_dir),
             'slice_dir': str(slice_dir),
             'output_dir': str(dataset_export_dir),
-            'csv_path': str(csv_path),
+            'csv_path': str(dataset_export_dir / f'{DATASET_BASENAME}.csv'),
         },
         split_manifest_metadata={
             'dataset_basename': DATASET_BASENAME,
@@ -449,6 +420,7 @@ def export_dataset(
         },
         collect_defined_function_names_fn=collect_defined_function_names,
         build_source_file_candidates_fn=build_source_file_candidates,
+        run_step07_export_core_fn=run_step07_export_core,
     )
 
 

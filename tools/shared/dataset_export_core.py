@@ -34,6 +34,88 @@ def _validate_export_inputs(
     normalized_slices_dir.mkdir(parents=True, exist_ok=True)
 
 
+def build_step07_export_paths(
+    output_dir: Path, dataset_basename: str | None = None
+) -> dict[str, Path]:
+    if dataset_basename:
+        return {
+            'csv_path': output_dir / f'{dataset_basename}.csv',
+            'dedup_dropped_csv': output_dir / f'{dataset_basename}_dedup_dropped.csv',
+            'normalized_slices_dir': output_dir / f'{dataset_basename}_slices',
+            'token_counts_csv': output_dir / f'{dataset_basename}_token_counts.csv',
+            'token_distribution_png': output_dir / f'{dataset_basename}_token_distribution.png',
+            'split_manifest_json': output_dir / f'{dataset_basename}_split_manifest.json',
+            'summary_json': output_dir / f'{dataset_basename}_summary.json',
+        }
+    return {
+        'csv_path': output_dir / 'Real_Vul_data.csv',
+        'dedup_dropped_csv': output_dir / 'Real_Vul_data_dedup_dropped.csv',
+        'normalized_slices_dir': output_dir / 'normalized_slices',
+        'token_counts_csv': output_dir / 'normalized_token_counts.csv',
+        'token_distribution_png': output_dir / 'slice_token_distribution.png',
+        'split_manifest_json': output_dir / 'split_manifest.json',
+        'summary_json': output_dir / 'summary.json',
+    }
+
+
+def run_step07_export_wrapper(
+    *,
+    pairs: list[dict[str, Any]],
+    paired_signatures_dir: Path,
+    slice_dir: Path,
+    output_dir: Path,
+    dedup_mode: str,
+    dataset_basename: str | None,
+    split_assignments_fn: Callable[[list[str]], dict[str, str]],
+    summary_metadata: dict[str, Any],
+    split_manifest_metadata: dict[str, Any],
+    collect_defined_function_names_fn: Callable[
+        [Path, dict[str, object]], tuple[set[str], str | None]
+    ],
+    build_source_file_candidates_fn: Callable[[dict[str, Any], str | None], list[Path]],
+    run_step07_export_core_fn: Callable[..., dict[str, Any]] | None = None,
+    prepare_target_fn: Callable[[Path, bool], None] | None = None,
+    overwrite: bool = False,
+) -> dict[str, Any]:
+    if not paired_signatures_dir.exists():
+        raise FileNotFoundError(f'Paired signatures dir not found: {paired_signatures_dir}')
+    if not slice_dir.exists():
+        raise FileNotFoundError(f'Slice dir not found: {slice_dir}')
+    if dedup_mode not in {'none', 'row'}:
+        raise ValueError(f'Unsupported dedup_mode: {dedup_mode}')
+
+    output_dir.mkdir(parents=True, exist_ok=True)
+    export_paths = build_step07_export_paths(
+        output_dir=output_dir,
+        dataset_basename=dataset_basename,
+    )
+    if prepare_target_fn is not None:
+        for target in export_paths.values():
+            prepare_target_fn(target, overwrite)
+
+    if run_step07_export_core_fn is None:
+        run_step07_export_core_fn = run_step07_export_core
+
+    return run_step07_export_core_fn(
+        pairs=pairs,
+        paired_signatures_dir=paired_signatures_dir,
+        slice_dir=slice_dir,
+        csv_path=export_paths['csv_path'],
+        dedup_dropped_csv=export_paths['dedup_dropped_csv'],
+        normalized_slices_dir=export_paths['normalized_slices_dir'],
+        token_counts_csv=export_paths['token_counts_csv'],
+        token_distribution_png=export_paths['token_distribution_png'],
+        split_manifest_json=export_paths['split_manifest_json'],
+        summary_json=export_paths['summary_json'],
+        dedup_mode=dedup_mode,
+        split_assignments_fn=split_assignments_fn,
+        summary_metadata=summary_metadata,
+        split_manifest_metadata=split_manifest_metadata,
+        collect_defined_function_names_fn=collect_defined_function_names_fn,
+        build_source_file_candidates_fn=build_source_file_candidates_fn,
+    )
+
+
 def _collect_surviving_pairs(
     *,
     pairs: list[dict[str, Any]],

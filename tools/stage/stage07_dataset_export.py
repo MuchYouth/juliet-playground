@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from shared.dataset_export_core import run_step07_export_core
+from shared.dataset_export_core import run_step07_export_core, run_step07_export_wrapper
 from shared.dataset_sources import build_source_file_candidates, collect_defined_function_names
 from shared.jsonio import load_jsonl as _load_jsonl
 
@@ -78,38 +78,18 @@ def compute_pair_split(pair_ids: list[str], train_ratio: float, seed: int) -> di
 def export_primary_dataset(params: PrimaryDatasetExportParams) -> PrimaryDatasetExportResult:
     if not params.pairs_jsonl.exists():
         raise FileNotFoundError(f'Pairs JSONL not found: {params.pairs_jsonl}')
-    if not params.paired_signatures_dir.exists():
-        raise FileNotFoundError(f'Paired signatures dir not found: {params.paired_signatures_dir}')
-    if not params.slice_dir.exists():
-        raise FileNotFoundError(f'Slice dir not found: {params.slice_dir}')
     if not (0.0 < params.train_ratio < 1.0):
         raise ValueError(f'train_ratio must be between 0 and 1: {params.train_ratio}')
-    if params.dedup_mode not in {'none', 'row'}:
-        raise ValueError(f'Unsupported dedup_mode: {params.dedup_mode}')
-
-    params.output_dir.mkdir(parents=True, exist_ok=True)
-    normalized_slices_dir = params.output_dir / 'normalized_slices'
-    real_vul_data_csv = params.output_dir / 'Real_Vul_data.csv'
-    dedup_dropped_csv = params.output_dir / 'Real_Vul_data_dedup_dropped.csv'
-    normalized_token_counts_csv = params.output_dir / 'normalized_token_counts.csv'
-    slice_token_distribution_png = params.output_dir / 'slice_token_distribution.png'
-    split_manifest_json = params.output_dir / 'split_manifest.json'
-    summary_json = params.output_dir / 'summary.json'
 
     pairs = load_pairs_jsonl(params.pairs_jsonl)
 
-    run_step07_export_core(
+    export_result = run_step07_export_wrapper(
         pairs=pairs,
         paired_signatures_dir=params.paired_signatures_dir,
         slice_dir=params.slice_dir,
-        csv_path=real_vul_data_csv,
-        dedup_dropped_csv=dedup_dropped_csv,
-        normalized_slices_dir=normalized_slices_dir,
-        token_counts_csv=normalized_token_counts_csv,
-        token_distribution_png=slice_token_distribution_png,
-        split_manifest_json=split_manifest_json,
-        summary_json=summary_json,
+        output_dir=params.output_dir,
         dedup_mode=params.dedup_mode,
+        dataset_basename=None,
         split_assignments_fn=lambda pair_ids: compute_pair_split(
             pair_ids, train_ratio=params.train_ratio, seed=params.split_seed
         ),
@@ -118,9 +98,9 @@ def export_primary_dataset(params: PrimaryDatasetExportParams) -> PrimaryDataset
             'paired_signatures_dir': str(params.paired_signatures_dir),
             'slice_dir': str(params.slice_dir),
             'output_dir': str(params.output_dir),
-            'real_vul_data_csv': str(real_vul_data_csv),
-            'normalized_token_counts_csv': str(normalized_token_counts_csv),
-            'slice_token_distribution_png': str(slice_token_distribution_png),
+            'real_vul_data_csv': str(params.output_dir / 'Real_Vul_data.csv'),
+            'normalized_token_counts_csv': str(params.output_dir / 'normalized_token_counts.csv'),
+            'slice_token_distribution_png': str(params.output_dir / 'slice_token_distribution.png'),
             'seed': params.split_seed,
             'train_ratio': params.train_ratio,
             'test_ratio': round(1.0 - params.train_ratio, 6),
@@ -137,17 +117,18 @@ def export_primary_dataset(params: PrimaryDatasetExportParams) -> PrimaryDataset
         },
         collect_defined_function_names_fn=collect_defined_function_names,
         build_source_file_candidates_fn=build_source_file_candidates,
+        run_step07_export_core_fn=run_step07_export_core,
     )
 
     return PrimaryDatasetExportResult(
-        summary_json=summary_json,
+        summary_json=Path(export_result['summary_json']),
         output_dir=params.output_dir,
-        normalized_slices_dir=normalized_slices_dir,
-        real_vul_data_csv=real_vul_data_csv,
-        dedup_dropped_csv=dedup_dropped_csv,
-        normalized_token_counts_csv=normalized_token_counts_csv,
-        slice_token_distribution_png=slice_token_distribution_png,
-        split_manifest_json=split_manifest_json,
+        normalized_slices_dir=Path(export_result['normalized_slices_dir']),
+        real_vul_data_csv=Path(export_result['csv_path']),
+        dedup_dropped_csv=Path(export_result['dedup_dropped_csv']),
+        normalized_token_counts_csv=Path(export_result['token_counts_csv']),
+        slice_token_distribution_png=Path(export_result['token_distribution_png']),
+        split_manifest_json=Path(export_result['split_manifest_json']),
     )
 
 
