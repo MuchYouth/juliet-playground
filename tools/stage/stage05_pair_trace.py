@@ -9,6 +9,7 @@ from typing import Any
 from shared.artifact_layout import build_pair_trace_paths
 from shared.fs import prepare_output_dir
 from shared.jsonio import write_json, write_jsonl
+from shared.pair_dataset import build_pair_dataset_row, write_pair_signature_exports
 from shared.pairing import (
     build_pairing_meta,
     build_signature_meta,
@@ -16,7 +17,7 @@ from shared.pairing import (
     make_pair_id,
 )
 from shared.paths import RESULT_DIR
-from shared.pipeline_runs import find_latest_pipeline_run_dir
+from shared.pipeline_layout import require_existing_file, resolve_standard_stage_paths
 from shared.signatures import load_signature_payload
 
 COUNTERPART_FLOW_TYPES = {
@@ -56,35 +57,31 @@ def resolve_paths(
     pipeline_root: Path = Path(RESULT_DIR) / 'pipeline-runs',
     run_dir: Path | None = None,
 ) -> tuple[Path, Path, Path | None]:
-    resolved_run_dir = run_dir.resolve() if run_dir is not None else None
-
-    if trace_jsonl is None:
-        if resolved_run_dir is None:
-            resolved_run_dir = find_latest_pipeline_run_dir(pipeline_root.resolve())
-        resolved_trace_jsonl = resolved_run_dir / '04_trace_flow' / 'trace_flow_match_strict.jsonl'
-    else:
-        resolved_trace_jsonl = trace_jsonl.resolve()
-        if resolved_run_dir is None:
-            resolved_run_dir = infer_run_dir_from_trace_jsonl(resolved_trace_jsonl)
-
-    if output_dir is None:
-        if resolved_run_dir is None:
-            raise ValueError(
-                '--output-dir is required when --trace-jsonl is outside the standard '
-                'pipeline run layout.'
-            )
-        resolved_output_dir = resolved_run_dir / '05_pair_trace_ds'
-    else:
-        resolved_output_dir = output_dir.resolve()
-
-    return resolved_trace_jsonl, resolved_output_dir, resolved_run_dir
+    return resolve_standard_stage_paths(
+        primary_input=trace_jsonl,
+        output_dir=output_dir,
+        run_dir=run_dir,
+        pipeline_root=pipeline_root,
+        infer_run_dir_from_input=infer_run_dir_from_trace_jsonl,
+        default_input_from_run_dir=(
+            lambda resolved_run_dir: resolved_run_dir
+            / '04_trace_flow'
+            / 'trace_flow_match_strict.jsonl'
+        ),
+        default_output_from_run_dir=lambda resolved_run_dir: resolved_run_dir / '05_pair_trace_ds',
+        missing_output_dir_message=(
+            '--output-dir is required when --trace-jsonl is outside the standard '
+            'pipeline run layout.'
+        ),
+    )
 
 
 def validate_args(trace_jsonl: Path) -> None:
-    if not trace_jsonl.exists():
-        raise FileNotFoundError(f'Strict trace JSONL not found: {trace_jsonl}')
-    if not trace_jsonl.is_file():
-        raise FileNotFoundError(f'Strict trace JSONL is not a file: {trace_jsonl}')
+    require_existing_file(
+        trace_jsonl,
+        missing_message=f'Strict trace JSONL not found: {trace_jsonl}',
+        not_file_message=f'Strict trace JSONL is not a file: {trace_jsonl}',
+    )
 
 
 def load_strict_records(trace_jsonl: Path) -> list[StrictTraceRecord]:
@@ -214,45 +211,41 @@ def build_paired_trace_dataset(
             counterpart_flow_type=counterpart_record.best_flow_type,
         )
 
-        testcase_dir = paired_signatures_dir / testcase_key
-        testcase_dir.mkdir(parents=True, exist_ok=True)
-
-        b2b_output_path = testcase_dir / 'b2b.json'
-        counterpart_output_path = testcase_dir / f'{counterpart_record.best_flow_type}.json'
-
-        b2b_export = dict(b2b_payload)
-        b2b_export['pairing_meta'] = build_pairing_meta(
-            pair_id=pair_id,
+        output_files = write_pair_signature_exports(
+            signatures_dir=paired_signatures_dir,
             testcase_key=testcase_key,
-            role='b2b',
-            selection_reason=str(pair['selection_reason']),
-            trace_file=str(b2b_record.trace_file),
-            best_flow_type=b2b_record.best_flow_type,
-            bug_trace_length=b2b_record.bug_trace_length,
+            counterpart_flow_type=counterpart_record.best_flow_type,
+            b2b_payload=b2b_payload,
+            b2b_pairing_meta=build_pairing_meta(
+                pair_id=pair_id,
+                testcase_key=testcase_key,
+                role='b2b',
+                selection_reason=str(pair['selection_reason']),
+                trace_file=str(b2b_record.trace_file),
+                best_flow_type=b2b_record.best_flow_type,
+                bug_trace_length=b2b_record.bug_trace_length,
+            ),
+            counterpart_payload=counterpart_payload,
+            counterpart_pairing_meta=build_pairing_meta(
+                pair_id=pair_id,
+                testcase_key=testcase_key,
+                role='counterpart',
+                selection_reason=str(pair['selection_reason']),
+                trace_file=str(counterpart_record.trace_file),
+                best_flow_type=counterpart_record.best_flow_type,
+                bug_trace_length=counterpart_record.bug_trace_length,
+            ),
         )
-        counterpart_export = dict(counterpart_payload)
-        counterpart_export['pairing_meta'] = build_pairing_meta(
-            pair_id=pair_id,
-            testcase_key=testcase_key,
-            role='counterpart',
-            selection_reason=str(pair['selection_reason']),
-            trace_file=str(counterpart_record.trace_file),
-            best_flow_type=counterpart_record.best_flow_type,
-            bug_trace_length=counterpart_record.bug_trace_length,
-        )
-
-        write_json(b2b_output_path, b2b_export)
-        write_json(counterpart_output_path, counterpart_export)
 
         final_pairs.append(
-            {
-                'pair_id': pair_id,
-                'testcase_key': testcase_key,
-                'selection_reason': pair['selection_reason'],
-                'b2b_flow_type': b2b_record.best_flow_type,
-                'b2b_trace_file': str(b2b_record.trace_file),
-                'b2b_bug_trace_length': b2b_record.bug_trace_length,
-                'b2b_signature': build_signature_meta(
+            build_pair_dataset_row(
+                pair_id=pair_id,
+                testcase_key=testcase_key,
+                selection_reason=str(pair['selection_reason']),
+                b2b_flow_type=b2b_record.best_flow_type,
+                b2b_trace_file=str(b2b_record.trace_file),
+                b2b_bug_trace_length=b2b_record.bug_trace_length,
+                b2b_signature=build_signature_meta(
                     payload=b2b_payload,
                     trace_file=str(b2b_record.trace_file),
                     best_flow_type=b2b_record.best_flow_type,
@@ -261,10 +254,10 @@ def build_paired_trace_dataset(
                     primary_file=b2b_record.primary_file,
                     primary_line=b2b_record.primary_line,
                 ),
-                'counterpart_flow_type': counterpart_record.best_flow_type,
-                'counterpart_trace_file': str(counterpart_record.trace_file),
-                'counterpart_bug_trace_length': counterpart_record.bug_trace_length,
-                'counterpart_signature': build_signature_meta(
+                counterpart_flow_type=counterpart_record.best_flow_type,
+                counterpart_trace_file=str(counterpart_record.trace_file),
+                counterpart_bug_trace_length=counterpart_record.bug_trace_length,
+                counterpart_signature=build_signature_meta(
                     payload=counterpart_payload,
                     trace_file=str(counterpart_record.trace_file),
                     best_flow_type=counterpart_record.best_flow_type,
@@ -273,11 +266,8 @@ def build_paired_trace_dataset(
                     primary_file=counterpart_record.primary_file,
                     primary_line=counterpart_record.primary_line,
                 ),
-                'output_files': {
-                    'b2b': str(b2b_output_path),
-                    counterpart_record.best_flow_type: str(counterpart_output_path),
-                },
-            }
+                output_files=output_files,
+            )
         )
 
         for leftover in pair['leftovers']:

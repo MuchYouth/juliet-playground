@@ -21,7 +21,11 @@ from typing import Any
 from shared.fs import prepare_output_dir
 from shared.jsonio import write_json
 from shared.paths import RESULT_DIR
-from shared.pipeline_runs import find_latest_pipeline_run_dir
+from shared.pipeline_layout import (
+    require_existing_dir,
+    resolve_standard_stage_paths,
+    validate_prefix_pair,
+)
 from shared.traces import extract_std_bug_trace
 
 CPP_SUFFIXES = {'.cpp', '.cc', '.cxx', '.c++'}
@@ -42,25 +46,23 @@ def resolve_paths(
     pipeline_root: Path = Path(RESULT_DIR) / 'pipeline-runs',
     run_dir: Path | None = None,
 ) -> tuple[Path, Path, Path, Path | None]:
-    resolved_run_dir = run_dir.resolve() if run_dir is not None else None
-
-    if signature_db_dir is None:
-        if resolved_run_dir is None:
-            resolved_run_dir = find_latest_pipeline_run_dir(pipeline_root.resolve())
-        resolved_signature_db_dir = resolved_run_dir / '05_pair_trace_ds' / 'paired_signatures'
-    else:
-        resolved_signature_db_dir = signature_db_dir.resolve()
-        if resolved_run_dir is None:
-            resolved_run_dir = infer_run_dir_from_signature_db_dir(resolved_signature_db_dir)
-
-    if output_dir is None:
-        if resolved_run_dir is None:
-            raise ValueError(
-                '--output-dir is required when --signature-db-dir is outside the standard pipeline layout.'
-            )
-        resolved_output_dir = resolved_run_dir / '06_slices'
-    else:
-        resolved_output_dir = output_dir.resolve()
+    resolved_signature_db_dir, resolved_output_dir, resolved_run_dir = (
+        resolve_standard_stage_paths(
+            primary_input=signature_db_dir,
+            output_dir=output_dir,
+            run_dir=run_dir,
+            pipeline_root=pipeline_root,
+            infer_run_dir_from_input=infer_run_dir_from_signature_db_dir,
+            default_input_from_run_dir=(
+                lambda resolved_run_dir: resolved_run_dir / '05_pair_trace_ds' / 'paired_signatures'
+            ),
+            default_output_from_run_dir=lambda resolved_run_dir: resolved_run_dir / '06_slices',
+            missing_output_dir_message=(
+                '--output-dir is required when --signature-db-dir is outside the standard '
+                'pipeline layout.'
+            ),
+        )
+    )
 
     slice_dir = resolved_output_dir / 'slice'
     return resolved_signature_db_dir, resolved_output_dir, slice_dir, resolved_run_dir
@@ -72,12 +74,12 @@ def validate_args(
     old_prefix: str | None = None,
     new_prefix: str | None = None,
 ) -> None:
-    if not signature_db_dir.exists():
-        raise FileNotFoundError(f'Signature DB dir not found: {signature_db_dir}')
-    if not signature_db_dir.is_dir():
-        raise NotADirectoryError(f'Signature DB dir is not a directory: {signature_db_dir}')
-    if bool(old_prefix) != bool(new_prefix):
-        raise ValueError('--old-prefix and --new-prefix must be provided together.')
+    require_existing_dir(
+        signature_db_dir,
+        missing_message=f'Signature DB dir not found: {signature_db_dir}',
+        not_dir_message=f'Signature DB dir is not a directory: {signature_db_dir}',
+    )
+    validate_prefix_pair(old_prefix, new_prefix)
 
 
 def fix_path(original_path: str, old_prefix: str | None, new_prefix: str | None) -> str:

@@ -22,12 +22,6 @@ def _prepare_export_outputs(*, csv_path: Path, normalized_slices_dir: Path) -> N
     normalized_slices_dir.mkdir(parents=True, exist_ok=True)
 
 
-def build_step07_export_paths(
-    output_dir: Path, dataset_basename: str | None = None
-) -> dict[str, Path]:
-    return build_dataset_export_paths(output_dir, dataset_basename)
-
-
 def run_step07_export_wrapper(
     *,
     pairs: list[dict[str, Any]],
@@ -84,6 +78,45 @@ def run_step07_export_wrapper(
         collect_defined_function_names_fn=collect_defined_function_names_fn,
         build_source_file_candidates_fn=build_source_file_candidates_fn,
     )
+
+
+def run_configured_step07_export(
+    *,
+    pairs: list[dict[str, Any]],
+    paired_signatures_dir: Path,
+    slice_dir: Path,
+    output_dir: Path,
+    dedup_mode: str,
+    dataset_basename: str | None,
+    split_assignments_fn: Callable[[list[str]], dict[str, str]],
+    summary_metadata: dict[str, Any],
+    split_manifest_metadata: dict[str, Any],
+    collect_defined_function_names_fn: Callable[
+        [Path, dict[str, object]], tuple[set[str], str | None]
+    ],
+    build_source_file_candidates_fn: Callable[[dict[str, Any], str | None], list[Path]],
+    run_step07_export_core_fn: Callable[..., dict[str, Any]],
+    prepare_target_fn: Callable[[Path, bool], None] | None = None,
+    overwrite: bool = False,
+) -> tuple[dict[str, Any], dict[str, Path]]:
+    export_paths = build_dataset_export_paths(output_dir, dataset_basename)
+    export_result = run_step07_export_wrapper(
+        pairs=pairs,
+        paired_signatures_dir=paired_signatures_dir,
+        slice_dir=slice_dir,
+        output_dir=output_dir,
+        dedup_mode=dedup_mode,
+        dataset_basename=dataset_basename,
+        split_assignments_fn=split_assignments_fn,
+        summary_metadata=summary_metadata,
+        split_manifest_metadata=split_manifest_metadata,
+        collect_defined_function_names_fn=collect_defined_function_names_fn,
+        build_source_file_candidates_fn=build_source_file_candidates_fn,
+        run_step07_export_core_fn=run_step07_export_core_fn,
+        prepare_target_fn=prepare_target_fn,
+        overwrite=overwrite,
+    )
+    return export_result, export_paths
 
 
 def _build_role_specs(pair: dict[str, Any]) -> list[dict[str, Any]]:

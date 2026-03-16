@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Any
 
 from shared.artifact_layout import build_dataset_export_paths
-from shared.dataset_export_core import run_step07_export_core, run_step07_export_wrapper
+from shared.dataset_export_core import run_configured_step07_export, run_step07_export_core
 from shared.dataset_sources import build_source_file_candidates, collect_defined_function_names
 from shared.jsonio import load_jsonl as _load_jsonl
 
@@ -84,8 +84,7 @@ def export_primary_dataset(params: PrimaryDatasetExportParams) -> PrimaryDataset
 
     pairs = load_pairs_jsonl(params.pairs_jsonl)
     export_paths = build_dataset_export_paths(params.output_dir)
-
-    export_result = run_step07_export_wrapper(
+    export_result, export_paths = run_configured_step07_export(
         pairs=pairs,
         paired_signatures_dir=params.paired_signatures_dir,
         slice_dir=params.slice_dir,
