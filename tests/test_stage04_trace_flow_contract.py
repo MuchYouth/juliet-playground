@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import json
 
+import pytest
+
 from tests.golden.helpers import (
     REPO_ROOT,
     load_module_from_path,
@@ -60,3 +62,27 @@ def test_stage04_trace_flow_contract(tmp_path):
 
     summary = json.loads(summary_path.read_text(encoding='utf-8'))
     assert {'flow_index', 'trace_stats', 'matched_best_flow_counts', 'output_files'} <= set(summary)
+
+
+def test_stage04_cli_rejects_removed_convenience_options():
+    module = load_module_from_path(
+        'test_stage04_trace_flow_cli',
+        REPO_ROOT / 'experiments/epic001d_trace_flow_filter/scripts/filter_traces_by_flow.py',
+    )
+
+    with pytest.raises(SystemExit) as excinfo:
+        run_module_main(
+            module,
+            [
+                '--flow-xml',
+                'flow.xml',
+                '--signatures-dir',
+                'signatures',
+                '--output-dir',
+                'out',
+                '--infer-name',
+                'infer-2026.03.09-14:42:44',
+            ],
+        )
+
+    assert excinfo.value.code == 2

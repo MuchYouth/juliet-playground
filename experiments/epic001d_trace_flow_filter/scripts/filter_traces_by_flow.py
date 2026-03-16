@@ -11,7 +11,6 @@ derive_testcase_key_from_file_name = _trace_flow.derive_testcase_key_from_file_n
 filter_traces_by_flow = _trace_flow.filter_traces_by_flow
 load_flow_index = _trace_flow.load_flow_index
 match_trace_to_flows = _trace_flow.match_trace_to_flows
-resolve_signatures_dir = _trace_flow.resolve_signatures_dir
 
 
 def main() -> int:

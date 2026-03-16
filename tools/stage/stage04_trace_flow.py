@@ -9,7 +9,6 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from shared.juliet_keys import derive_testcase_key_from_file_name
-from shared.paths import RESULT_DIR
 
 TARGET_TAGS = {'flaw', 'comment_flaw', 'comment_fix'}
 
@@ -129,40 +128,6 @@ def choose_best_flow(flow_match: dict[str, dict]) -> tuple[str | None, dict | No
     return best_type, best
 
 
-def resolve_signatures_dir(
-    explicit_dir: Path | None,
-    signatures_root: Path,
-    infer_name: str | None,
-    signature_name: str | None,
-) -> Path:
-    if explicit_dir is not None:
-        return explicit_dir
-
-    if infer_name:
-        infer_dir = signatures_root / infer_name
-    else:
-        infer_candidates = sorted(
-            [p for p in signatures_root.glob('infer-*') if p.is_dir()],
-            key=lambda p: p.name,
-        )
-        if not infer_candidates:
-            raise FileNotFoundError(f'No infer-* directories found under: {signatures_root}')
-        infer_dir = infer_candidates[-1]
-
-    if signature_name:
-        signature_dir = infer_dir / signature_name
-    else:
-        signature_candidates = sorted(
-            [p for p in infer_dir.glob('signature-*') if p.is_dir()],
-            key=lambda p: p.name,
-        )
-        if not signature_candidates:
-            raise FileNotFoundError(f'No signature-* directories found under: {infer_dir}')
-        signature_dir = signature_candidates[-1]
-
-    return signature_dir / 'non_empty'
-
-
 def filter_traces_by_flow(
     *, flow_xml: Path, signatures_dir: Path, output_dir: Path
 ) -> dict[str, object]:
@@ -274,50 +239,19 @@ def filter_traces_by_flow(
 
 def main() -> int:
     parser = argparse.ArgumentParser(description='Filter signature traces by testcase flow tags.')
-    parser.add_argument(
-        '--flow-xml',
-        type=Path,
-        default=Path(
-            'experiments/epic001c_testcase_flow_partition/outputs/manifest_with_testcase_flows.xml'
-        ),
-    )
+    parser.add_argument('--flow-xml', type=Path, required=True)
     parser.add_argument(
         '--signatures-dir',
         type=Path,
-        default=None,
+        required=True,
         help='Full path to a non_empty signatures dir',
     )
-    parser.add_argument(
-        '--signatures-root',
-        type=Path,
-        default=Path(RESULT_DIR) / 'signatures',
-        help='Root dir containing infer-* folders',
-    )
-    parser.add_argument(
-        '--infer-name',
-        type=str,
-        default=None,
-        help='Folder name under --signatures-root (e.g., infer-2026.03.09-14:42:44)',
-    )
-    parser.add_argument(
-        '--signature-name',
-        type=str,
-        default=None,
-        help='Folder name under selected infer dir (e.g., signature-2026.03.09-14:43:10)',
-    )
-    parser.add_argument(
-        '--output-dir',
-        type=Path,
-        default=Path('experiments/epic001d_trace_flow_filter/outputs'),
-    )
+    parser.add_argument('--output-dir', type=Path, required=True)
     args = parser.parse_args()
 
-    signatures_dir = resolve_signatures_dir(
-        args.signatures_dir, args.signatures_root, args.infer_name, args.signature_name
-    )
     filter_traces_by_flow(
         flow_xml=args.flow_xml,
-        signatures_dir=signatures_dir,
+        signatures_dir=args.signatures_dir,
         output_dir=args.output_dir,
     )
     return 0
