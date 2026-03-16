@@ -294,33 +294,56 @@ def write_rerun_metadata(
     return metadata_path
 
 
-def main() -> int:
-    args = parse_args()
+def run_rerun_step07(
+    *,
+    run_dir: Path | None = None,
+    pipeline_root: Path = Path(RESULT_DIR) / 'pipeline-runs',
+    output_dir: Path | None = None,
+    dedup_mode: str = 'row',
+    overwrite: bool = False,
+    only_07: bool = False,
+    only_07b: bool = False,
+    old_prefix: str | None = None,
+    new_prefix: str | None = None,
+) -> dict[str, Any]:
+    args = argparse.Namespace(
+        run_dir=run_dir,
+        pipeline_root=pipeline_root,
+        output_dir=output_dir,
+        dedup_mode=dedup_mode,
+        overwrite=overwrite,
+        only_07=only_07,
+        only_07b=only_07b,
+        old_prefix=old_prefix,
+        new_prefix=new_prefix,
+    )
     validate_args(args)
-    run_dir = resolve_run_dir(args)
+    resolved_run_dir = resolve_run_dir(args)
     run_suffix = now_ts_compact()
-    output_dir = resolve_output_dir(run_dir=run_dir, args=args, run_suffix=run_suffix)
+    resolved_output_dir = resolve_output_dir(
+        run_dir=resolved_run_dir, args=args, run_suffix=run_suffix
+    )
     run_step07 = not args.only_07b
     run_step07b = not args.only_07
-    step07b_suffix = infer_suffix_from_output_dir(output_dir)
+    step07b_suffix = infer_suffix_from_output_dir(resolved_output_dir)
 
     started_at = now_iso_utc()
     step07_result: dict[str, Any] | None = None
     if run_step07:
         step07_result = rerun_step07(
-            run_dir=run_dir,
-            output_dir=output_dir,
+            run_dir=resolved_run_dir,
+            output_dir=resolved_output_dir,
             dedup_mode=args.dedup_mode,
             overwrite=args.overwrite,
         )
     else:
-        validate_step07_output_dir(output_dir)
+        validate_step07_output_dir(resolved_output_dir)
 
     step07b_result: dict[str, Any] | None = None
     if run_step07b:
         step07b_result = rerun_step07b(
-            run_dir=run_dir,
-            dataset_export_dir=output_dir,
+            run_dir=resolved_run_dir,
+            dataset_export_dir=resolved_output_dir,
             run_suffix=step07b_suffix,
             dedup_mode=args.dedup_mode,
             overwrite=args.overwrite,
@@ -329,8 +352,8 @@ def main() -> int:
         )
 
     metadata_path = write_rerun_metadata(
-        run_dir=run_dir,
-        output_dir=output_dir,
+        run_dir=resolved_run_dir,
+        output_dir=resolved_output_dir,
         started_at=started_at,
         args=args,
         run_step07=run_step07,
@@ -339,19 +362,34 @@ def main() -> int:
         step07b_result=step07b_result,
     )
 
-    result = {
-        'run_dir': str(run_dir),
-        'output_dir': str(output_dir),
+    return {
+        'run_dir': str(resolved_run_dir),
+        'output_dir': str(resolved_output_dir),
         'dedup_mode': args.dedup_mode,
         'ran_step07': run_step07,
         'ran_step07b': run_step07b,
         'metadata_json': str(metadata_path),
-        'step07_summary_json': str(output_dir / 'summary.json'),
-        'step07_split_manifest_json': str(output_dir / 'split_manifest.json'),
-        'step07b_summary_json': str(output_dir / 'train_patched_counterparts_summary.json')
+        'step07_summary_json': str(resolved_output_dir / 'summary.json'),
+        'step07_split_manifest_json': str(resolved_output_dir / 'split_manifest.json'),
+        'step07b_summary_json': str(resolved_output_dir / 'train_patched_counterparts_summary.json')
         if run_step07b
         else None,
     }
+
+
+def main() -> int:
+    args = parse_args()
+    result = run_rerun_step07(
+        run_dir=args.run_dir,
+        pipeline_root=args.pipeline_root,
+        output_dir=args.output_dir,
+        dedup_mode=args.dedup_mode,
+        overwrite=args.overwrite,
+        only_07=args.only_07,
+        only_07b=args.only_07b,
+        old_prefix=args.old_prefix,
+        new_prefix=args.new_prefix,
+    )
     print(json.dumps(result, ensure_ascii=False, indent=2))
     return 0
 

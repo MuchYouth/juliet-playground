@@ -819,6 +819,50 @@ def add_flow_tags_to_testcase(
     return summary
 
 
+def run_stage02b_flow(*, input_xml: Path, source_root: Path, output_dir: Path) -> dict[str, object]:
+    output_csv = output_dir / 'function_names_unique.csv'
+    function_inventory_summary_json = output_dir / 'function_inventory_summary.json'
+    output_jsonl = output_dir / 'function_names_categorized.jsonl'
+    output_nested_json = output_dir / 'grouped_family_role.json'
+    category_summary_json = output_dir / 'category_summary.json'
+    output_xml = output_dir / 'manifest_with_testcase_flows.xml'
+    testcase_flow_summary_json = output_dir / 'testcase_flow_summary.json'
+
+    extract_result = extract_function_inventory(
+        input_xml=input_xml,
+        output_csv=output_csv,
+        output_summary=function_inventory_summary_json,
+    )
+    categorize_result = categorize_function_names(
+        input_csv=output_csv,
+        manifest_xml=input_xml,
+        source_root=source_root,
+        output_jsonl=output_jsonl,
+        output_nested_json=output_nested_json,
+        output_summary=category_summary_json,
+    )
+    partition_result = add_flow_tags_to_testcase(
+        input_xml=input_xml,
+        function_categories_jsonl=output_jsonl,
+        output_xml=output_xml,
+        summary_json=testcase_flow_summary_json,
+    )
+
+    return {
+        'output_dir': str(output_dir),
+        'function_names_unique_csv': str(output_csv),
+        'function_inventory_summary_json': str(function_inventory_summary_json),
+        'function_names_categorized_jsonl': str(output_jsonl),
+        'grouped_family_role_json': str(output_nested_json),
+        'category_summary_json': str(category_summary_json),
+        'manifest_with_testcase_flows_xml': str(output_xml),
+        'testcase_flow_summary_json': str(testcase_flow_summary_json),
+        'extract_result': extract_result,
+        'categorize_result': categorize_result,
+        'partition_result': partition_result,
+    }
+
+
 def main_partition() -> int:
     parser = argparse.ArgumentParser(description='Add per-testcase flow tags (b2b/b2g/g2b).')
     parser.add_argument(
