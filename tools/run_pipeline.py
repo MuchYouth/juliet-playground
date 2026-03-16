@@ -13,6 +13,7 @@ from stage import stage01_manifest as _stage01_manifest
 from stage import stage02a_taint as _stage02a_taint
 from stage import stage02b_flow as _stage02b_flow
 from stage import stage03_infer as _stage03_infer
+from stage import stage03_signature as _stage03_signature
 from stage import stage04_trace_flow as _stage04_trace_flow
 from stage import stage05_pair_trace as _stage05_pair_trace
 from stage import stage06_slices as _stage06_slices
@@ -109,20 +110,41 @@ def parse_args() -> argparse.Namespace:
     )
     stage03.add_argument('--summary-json', type=Path, default=None)
 
+    stage03_signature = subparsers.add_parser(
+        'stage03-signature',
+        help='Run signature generation from an existing infer-* directory.',
+    )
+    stage03_signature.add_argument('--input-dir', type=Path, default=None)
+    stage03_signature.add_argument(
+        '--output-root',
+        type=Path,
+        default=Path(_stage03_signature.RESULT_DIR) / 'signatures',
+    )
+
     stage04 = subparsers.add_parser('stage04', help='Run Stage 04 trace flow filter.')
     stage04.add_argument('--flow-xml', type=Path, required=True)
     stage04.add_argument('--signatures-dir', type=Path, required=True)
     stage04.add_argument('--output-dir', type=Path, required=True)
 
     stage05 = subparsers.add_parser('stage05', help='Run Stage 05 pair trace dataset.')
-    stage05.add_argument('--trace-jsonl', type=Path, required=True)
-    stage05.add_argument('--output-dir', type=Path, required=True)
+    stage05.add_argument('--trace-jsonl', type=Path, default=None)
+    stage05.add_argument('--output-dir', type=Path, default=None)
+    stage05.add_argument(
+        '--pipeline-root',
+        type=Path,
+        default=Path(_stage05_pair_trace.RESULT_DIR) / 'pipeline-runs',
+    )
     stage05.add_argument('--overwrite', action='store_true')
     stage05.add_argument('--run-dir', type=Path, default=None)
 
     stage06 = subparsers.add_parser('stage06', help='Run Stage 06 slices generation.')
-    stage06.add_argument('--signature-db-dir', type=Path, required=True)
-    stage06.add_argument('--output-dir', type=Path, required=True)
+    stage06.add_argument('--signature-db-dir', type=Path, default=None)
+    stage06.add_argument('--output-dir', type=Path, default=None)
+    stage06.add_argument(
+        '--pipeline-root',
+        type=Path,
+        default=Path(_stage06_slices.RESULT_DIR) / 'pipeline-runs',
+    )
     stage06.add_argument('--old-prefix', type=str, default=None)
     stage06.add_argument('--new-prefix', type=str, default=None)
     stage06.add_argument('--overwrite', action='store_true')
@@ -138,13 +160,18 @@ def parse_args() -> argparse.Namespace:
     stage07.add_argument('--dedup-mode', choices=['none', 'row'], default='row')
 
     stage07b = subparsers.add_parser('stage07b', help='Run Stage 07b patched export.')
-    stage07b.add_argument('--run-dir', type=Path, required=True)
-    stage07b.add_argument('--pair-dir', type=Path, required=True)
-    stage07b.add_argument('--dataset-export-dir', type=Path, required=True)
-    stage07b.add_argument('--signature-output-dir', type=Path, required=True)
-    stage07b.add_argument('--slice-output-dir', type=Path, required=True)
-    stage07b.add_argument('--output-pairs-jsonl', type=Path, required=True)
-    stage07b.add_argument('--selection-summary-json', type=Path, required=True)
+    stage07b.add_argument('--run-dir', type=Path, default=None)
+    stage07b.add_argument('--pair-dir', type=Path, default=None)
+    stage07b.add_argument('--dataset-export-dir', type=Path, default=None)
+    stage07b.add_argument('--signature-output-dir', type=Path, default=None)
+    stage07b.add_argument('--slice-output-dir', type=Path, default=None)
+    stage07b.add_argument('--output-pairs-jsonl', type=Path, default=None)
+    stage07b.add_argument('--selection-summary-json', type=Path, default=None)
+    stage07b.add_argument(
+        '--pipeline-root',
+        type=Path,
+        default=Path(_stage07b_patched_export.RESULT_DIR) / 'pipeline-runs',
+    )
     stage07b.add_argument('--dedup-mode', choices=['none', 'row'], default='row')
     stage07b.add_argument('--overwrite', action='store_true')
     stage07b.add_argument('--old-prefix', type=str, default=None)
@@ -231,6 +258,15 @@ def main() -> int:
             )
         )
 
+    if args.command == 'stage03-signature':
+        return int(
+            _stage03_signature.main(
+                input_dir=args.input_dir,
+                output_root=args.output_root,
+            )
+            or 0
+        )
+
     if args.command == 'stage04':
         return _print_result(
             _stage04_trace_flow.filter_traces_by_flow(
@@ -241,24 +277,26 @@ def main() -> int:
         )
 
     if args.command == 'stage05':
+        trace_jsonl, output_dir, run_dir = _stage05_pair_trace.resolve_paths(args)
         return _print_result(
             _stage05_pair_trace.build_paired_trace_dataset(
-                trace_jsonl=args.trace_jsonl,
-                output_dir=args.output_dir,
+                trace_jsonl=trace_jsonl,
+                output_dir=output_dir,
                 overwrite=args.overwrite,
-                run_dir=args.run_dir,
+                run_dir=run_dir if args.run_dir is None else args.run_dir,
             )
         )
 
     if args.command == 'stage06':
+        signature_db_dir, output_dir, _slice_dir, run_dir = _stage06_slices.resolve_paths(args)
         return _print_result(
             _stage06_slices.generate_slices(
-                signature_db_dir=args.signature_db_dir,
-                output_dir=args.output_dir,
+                signature_db_dir=signature_db_dir,
+                output_dir=output_dir,
                 old_prefix=args.old_prefix,
                 new_prefix=args.new_prefix,
                 overwrite=args.overwrite,
-                run_dir=args.run_dir,
+                run_dir=run_dir if args.run_dir is None else args.run_dir,
             )
         )
 
@@ -278,16 +316,41 @@ def main() -> int:
         )
 
     if args.command == 'stage07b':
+        paths = _stage07b_patched_export.resolve_paths(args)
+        _stage07b_patched_export.validate_args(args, paths)
+        run_dir = paths['run_dir']
+        pair_dir = paths['pair_dir']
+        dataset_export_dir = paths['dataset_export_dir']
+        signature_output_dir = paths['signature_output_dir']
+        slice_output_dir = paths['slice_output_dir']
+        if (
+            run_dir is None
+            or pair_dir is None
+            or dataset_export_dir is None
+            or signature_output_dir is None
+            or slice_output_dir is None
+        ):
+            raise ValueError('Failed to resolve required stage07b paths.')
+        output_pairs_jsonl = (
+            args.output_pairs_jsonl.resolve()
+            if args.output_pairs_jsonl is not None
+            else pair_dir / f'{_stage07b_patched_export.DATASET_BASENAME}_pairs.jsonl'
+        )
+        selection_summary_json = (
+            args.selection_summary_json.resolve()
+            if args.selection_summary_json is not None
+            else pair_dir / f'{_stage07b_patched_export.DATASET_BASENAME}_selection_summary.json'
+        )
         return _print_result(
             _stage07b_patched_export.export_patched_dataset(
                 _stage07b_patched_export.PatchedDatasetExportParams(
-                    run_dir=args.run_dir,
-                    pair_dir=args.pair_dir,
-                    dataset_export_dir=args.dataset_export_dir,
-                    signature_output_dir=args.signature_output_dir,
-                    slice_output_dir=args.slice_output_dir,
-                    output_pairs_jsonl=args.output_pairs_jsonl,
-                    selection_summary_json=args.selection_summary_json,
+                    run_dir=run_dir,
+                    pair_dir=pair_dir,
+                    dataset_export_dir=dataset_export_dir,
+                    signature_output_dir=signature_output_dir,
+                    slice_output_dir=slice_output_dir,
+                    output_pairs_jsonl=output_pairs_jsonl,
+                    selection_summary_json=selection_summary_json,
                     dedup_mode=args.dedup_mode,
                     overwrite=args.overwrite,
                     old_prefix=args.old_prefix,

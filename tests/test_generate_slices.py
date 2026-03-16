@@ -2,11 +2,14 @@ from __future__ import annotations
 
 import json
 
+from tests.helpers import REPO_ROOT, load_module_from_path
 
-def test_process_signature_db_uses_longest_subtrace_and_dedupes_locations(
-    tmp_path, load_tools_module
-):
-    module = load_tools_module('test_generate_slices_module', 'generate_slices.py')
+
+def test_process_signature_db_uses_longest_subtrace_and_dedupes_locations(tmp_path):
+    module = load_module_from_path(
+        'test_stage06_slices_module',
+        REPO_ROOT / 'tools/stage/stage06_slices.py',
+    )
 
     source_file = tmp_path / 'sample.c'
     source_file.write_text('line 1\nline 2\nline 3\n', encoding='utf-8')

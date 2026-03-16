@@ -94,6 +94,99 @@ def test_stage03_subcommand_delegates(monkeypatch, tmp_path):
     assert captured['summary_json'] == tmp_path / 'summary.json'
 
 
+def test_stage03_signature_subcommand_delegates(monkeypatch, tmp_path):
+    module = load_module_from_path(
+        'test_run_pipeline_stage03_signature',
+        REPO_ROOT / 'tools/run_pipeline.py',
+    )
+
+    captured: dict[str, object] = {}
+
+    def fake_main(**kwargs):
+        captured.update(kwargs)
+        return None
+
+    monkeypatch.setattr(module._stage03_signature, 'main', fake_main)
+
+    result = run_module_main(
+        module,
+        [
+            'stage03-signature',
+            '--input-dir',
+            str(tmp_path / 'infer-run'),
+            '--output-root',
+            str(tmp_path / 'signatures'),
+        ],
+    )
+
+    assert result == 0
+    assert captured['input_dir'] == tmp_path / 'infer-run'
+    assert captured['output_root'] == tmp_path / 'signatures'
+
+
+def test_stage05_subcommand_uses_wrapper_style_path_resolution(monkeypatch, tmp_path):
+    module = load_module_from_path('test_run_pipeline_stage05', REPO_ROOT / 'tools/run_pipeline.py')
+
+    captured: dict[str, object] = {}
+
+    monkeypatch.setattr(
+        module._stage05_pair_trace,
+        'resolve_paths',
+        lambda args: (
+            tmp_path / 'trace.jsonl',
+            tmp_path / '05_pair_trace_ds',
+            tmp_path / 'run',
+        ),
+    )
+
+    def fake_build_paired_trace_dataset(**kwargs):
+        captured.update(kwargs)
+        return {'pairs_jsonl': str(tmp_path / '05_pair_trace_ds' / 'pairs.jsonl')}
+
+    monkeypatch.setattr(
+        module._stage05_pair_trace,
+        'build_paired_trace_dataset',
+        fake_build_paired_trace_dataset,
+    )
+
+    result = run_module_main(module, ['stage05'])
+
+    assert result == 0
+    assert captured['trace_jsonl'] == tmp_path / 'trace.jsonl'
+    assert captured['output_dir'] == tmp_path / '05_pair_trace_ds'
+    assert captured['run_dir'] == tmp_path / 'run'
+
+
+def test_stage06_subcommand_uses_wrapper_style_path_resolution(monkeypatch, tmp_path):
+    module = load_module_from_path('test_run_pipeline_stage06', REPO_ROOT / 'tools/run_pipeline.py')
+
+    captured: dict[str, object] = {}
+
+    monkeypatch.setattr(
+        module._stage06_slices,
+        'resolve_paths',
+        lambda args: (
+            tmp_path / 'paired_signatures',
+            tmp_path / '06_slices',
+            tmp_path / '06_slices' / 'slice',
+            tmp_path / 'run',
+        ),
+    )
+
+    def fake_generate_slices(**kwargs):
+        captured.update(kwargs)
+        return {'summary_json': str(tmp_path / '06_slices' / 'summary.json')}
+
+    monkeypatch.setattr(module._stage06_slices, 'generate_slices', fake_generate_slices)
+
+    result = run_module_main(module, ['stage06'])
+
+    assert result == 0
+    assert captured['signature_db_dir'] == tmp_path / 'paired_signatures'
+    assert captured['output_dir'] == tmp_path / '06_slices'
+    assert captured['run_dir'] == tmp_path / 'run'
+
+
 def test_stage07_subcommand_delegates(monkeypatch, tmp_path):
     module = load_module_from_path('test_run_pipeline_stage07', REPO_ROOT / 'tools/run_pipeline.py')
 
@@ -156,25 +249,23 @@ def test_stage07b_subcommand_delegates(monkeypatch, tmp_path):
     monkeypatch.setattr(
         module._stage07b_patched_export, 'export_patched_dataset', fake_export_patched_dataset
     )
+    monkeypatch.setattr(
+        module._stage07b_patched_export,
+        'resolve_paths',
+        lambda args: {
+            'run_dir': tmp_path / 'run',
+            'pair_dir': tmp_path / 'pair',
+            'dataset_export_dir': tmp_path / 'dataset',
+            'signature_output_dir': tmp_path / 'signatures',
+            'slice_output_dir': tmp_path / 'slices',
+        },
+    )
+    monkeypatch.setattr(module._stage07b_patched_export, 'validate_args', lambda args, paths: None)
 
     result = run_module_main(
         module,
         [
             'stage07b',
-            '--run-dir',
-            str(tmp_path / 'run'),
-            '--pair-dir',
-            str(tmp_path / 'pair'),
-            '--dataset-export-dir',
-            str(tmp_path / 'dataset'),
-            '--signature-output-dir',
-            str(tmp_path / 'signatures'),
-            '--slice-output-dir',
-            str(tmp_path / 'slices'),
-            '--output-pairs-jsonl',
-            str(tmp_path / 'pairs.jsonl'),
-            '--selection-summary-json',
-            str(tmp_path / 'selection.json'),
             '--dedup-mode',
             'none',
         ],
@@ -184,6 +275,10 @@ def test_stage07b_subcommand_delegates(monkeypatch, tmp_path):
     params = captured['params']
     assert params.run_dir == tmp_path / 'run'
     assert params.dataset_export_dir == tmp_path / 'dataset'
+    assert params.output_pairs_jsonl == tmp_path / 'pair' / 'train_patched_counterparts_pairs.jsonl'
+    assert params.selection_summary_json == (
+        tmp_path / 'pair' / 'train_patched_counterparts_selection_summary.json'
+    )
     assert params.dedup_mode == 'none'
 
 

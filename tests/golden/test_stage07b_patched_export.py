@@ -16,7 +16,7 @@ def test_stage07b_patched_export_matches_golden(tmp_path, monkeypatch):
     baseline_root, work_root = prepare_workspace(tmp_path)
     module = load_module_from_path(
         'test_golden_stage07b_patched_export',
-        REPO_ROOT / 'tools/export_train_patched_counterparts.py',
+        REPO_ROOT / 'tools/run_pipeline.py',
     )
 
     monkeypatch.chdir(baseline_root)
@@ -42,6 +42,7 @@ def test_stage07b_patched_export_matches_golden(tmp_path, monkeypatch):
             run_module_main(
                 module,
                 [
+                    'stage07b',
                     '--pair-dir',
                     str(pair_dir),
                     '--dataset-export-dir',

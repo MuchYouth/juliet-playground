@@ -15,7 +15,7 @@ def test_stage06_slices_matches_golden(tmp_path):
     root_aliases = [(baseline_root, ''), (work_root, ''), (REPO_ROOT, '')]
     module = load_module_from_path(
         'test_golden_stage06_slices',
-        REPO_ROOT / 'tools/generate_slices.py',
+        REPO_ROOT / 'tools/run_pipeline.py',
     )
 
     output_dir = work_root / 'expected/06_slices'
@@ -23,6 +23,7 @@ def test_stage06_slices_matches_golden(tmp_path):
         run_module_main(
             module,
             [
+                'stage06',
                 '--signature-db-dir',
                 str(baseline_root / 'expected/05_pair_trace_ds/paired_signatures'),
                 '--output-dir',

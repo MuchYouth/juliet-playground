@@ -16,19 +16,7 @@
 
 - `tools/run_pipeline.py`
   - 전체 파이프라인, stage별 실행, `rerun-step07`를 한 곳에서 실행하는 기본 entrypoint
-  - 대표 subcommand: `full`, `stage03`, `stage05`, `stage06`, `stage07`, `stage07b`, `rerun-step07`
-- `tools/generate-signature.py`
-  - `infer-out/report.json`에서 `bug_type == TAINT_ERROR`이고 `bug_trace`가 non-empty인 이슈만 JSON으로 저장
-  - `non_empty/analysis/signature_counts.csv` 생성
-- `tools/build-paired-trace-signatures.py`
-  - strict trace 중 testcase별 `b2b`와 counterpart를 1:1 선택
-  - 후보가 여러 개면 `bug_trace_length`가 가장 긴 trace를 선택하고 나머지는 `leftover_counterparts.jsonl`로 보관
-- `tools/generate_slices.py`
-  - paired signature JSON의 `bug_trace`에서 소스 라인을 읽어 slice 생성
-  - `bug_trace`가 `list[list[dict]]`이면 가장 긴 subtrace를 사용
-- `tools/export_train_patched_counterparts.py`
-  - 기존 `07_dataset_export/split_manifest.json`의 `train_val` pair만 대상으로
-    testcase별 최상위 leftover counterpart 1개를 골라 평가용 export 생성
+  - 대표 subcommand: `full`, `stage03`, `stage03-signature`, `stage05`, `stage06`, `stage07`, `stage07b`, `rerun-step07`
 - `tools/tokenize_slices.py`
   - slice 디렉터리를 독립적으로 토큰화하고 분포 plot을 생성하는 보조 스크립트
   - 메인 파이프라인은 이 스크립트를 직접 호출하지 않고, 내부 유틸리티를 재사용합니다.

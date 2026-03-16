@@ -6,7 +6,7 @@
 ## 단일 Infer / Signature 산출물
 
 `python tools/run_pipeline.py stage03 ...` 또는
-`python tools/generate-signature.py ...`를 독립 실행하면 기본적으로 아래 위치를 사용합니다.
+`python tools/run_pipeline.py stage03-signature ...`를 독립 실행하면 기본적으로 아래 위치를 사용합니다.
 
 ```text
 artifacts/

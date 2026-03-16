@@ -14,7 +14,7 @@ def test_stage06_slices_contract(tmp_path):
     baseline_root, work_root = prepare_workspace(tmp_path)
     module = load_module_from_path(
         'test_stage06_slices_contract',
-        REPO_ROOT / 'tools/generate_slices.py',
+        REPO_ROOT / 'tools/run_pipeline.py',
     )
 
     output_dir = work_root / 'expected/06_slices'
@@ -22,6 +22,7 @@ def test_stage06_slices_contract(tmp_path):
         run_module_main(
             module,
             [
+                'stage06',
                 '--signature-db-dir',
                 str(baseline_root / 'expected/05_pair_trace_ds/paired_signatures'),
                 '--output-dir',

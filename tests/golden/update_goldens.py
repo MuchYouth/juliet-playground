@@ -291,13 +291,14 @@ def run_stage04(temp_root: Path) -> None:
 def run_stage05(temp_root: Path) -> None:
     module = load_module_from_path(
         'golden_stage05_pair_trace',
-        REPO_ROOT / 'tools/build-paired-trace-signatures.py',
+        REPO_ROOT / 'tools/run_pipeline.py',
     )
     output_dir = temp_root / 'expected/05_pair_trace_ds'
     ensure_clean_dir(output_dir)
     result = run_module_main(
         module,
         [
+            'stage05',
             '--trace-jsonl',
             str(temp_root / 'expected/04_trace_flow/trace_flow_match_strict.jsonl'),
             '--output-dir',
@@ -312,13 +313,14 @@ def run_stage05(temp_root: Path) -> None:
 def run_stage06(temp_root: Path) -> None:
     module = load_module_from_path(
         'golden_stage06_slices',
-        REPO_ROOT / 'tools/generate_slices.py',
+        REPO_ROOT / 'tools/run_pipeline.py',
     )
     output_dir = temp_root / 'expected/06_slices'
     ensure_clean_dir(output_dir)
     result = run_module_main(
         module,
         [
+            'stage06',
             '--signature-db-dir',
             str(temp_root / 'expected/05_pair_trace_ds/paired_signatures'),
             '--output-dir',
@@ -357,7 +359,7 @@ def run_stage07(temp_root: Path) -> None:
 def run_stage07b(temp_root: Path) -> None:
     module = load_module_from_path(
         'golden_stage07b_export',
-        REPO_ROOT / 'tools/export_train_patched_counterparts.py',
+        REPO_ROOT / 'tools/run_pipeline.py',
     )
 
     pair_dir = temp_root / 'expected/05_pair_trace_ds'
@@ -401,6 +403,7 @@ def run_stage07b(temp_root: Path) -> None:
         result = run_module_main(
             module,
             [
+                'stage07b',
                 '--pair-dir',
                 str(pair_dir),
                 '--dataset-export-dir',

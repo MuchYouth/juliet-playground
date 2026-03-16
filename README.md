@@ -148,13 +148,13 @@ python tools/run_pipeline.py stage03 78
 python tools/run_pipeline.py stage03 --files juliet-test-suite-v1.3/C/testcases/CWE78_OS_Command_Injection/s01/CWE78_OS_Command_Injection__char_console_execlp_52a.c
 
 # 기존 infer 결과에서 signature만 생성
-python tools/generate-signature.py --input-dir artifacts/infer-results/infer-2026.03.08-18:04:18
+python tools/run_pipeline.py stage03-signature --input-dir artifacts/infer-results/infer-2026.03.08-18:04:18
 
 # 통합 파이프라인
 python tools/run_pipeline.py full 78 89
 
 # strict trace 결과에서 paired trace dataset만 생성
-python tools/run_pipeline.py stage05 --trace-jsonl artifacts/pipeline-runs/run-2026.03.09-22:18:32/04_trace_flow/trace_flow_match_strict.jsonl --output-dir /tmp/paired-trace-ds
+python tools/run_pipeline.py stage05
 
 # 기존 run의 Step 07 + 07b 재생성
 python tools/run_pipeline.py rerun-step07 --run-dir artifacts/pipeline-runs/run-2026.03.10-00:49:21
@@ -164,7 +164,7 @@ python tools/run_pipeline.py rerun-step07 --run-dir artifacts/pipeline-runs/run-
 
 ## 메모
 
-- `tools/generate-signature.py`는 `infer-out/report.json`의 모든 이슈를 저장하지 않습니다.
+- `tools/run_pipeline.py stage03-signature`는 `infer-out/report.json`의 모든 이슈를 저장하지 않습니다.
   `bug_type == TAINT_ERROR`이면서 `bug_trace`가 non-empty인 레코드만 signature로 저장합니다.
 - `--files` 사용 시 `cwes` / `--all`은 무시됩니다.
 - `--all` 사용 시 positional `cwes` 인자는 무시됩니다.

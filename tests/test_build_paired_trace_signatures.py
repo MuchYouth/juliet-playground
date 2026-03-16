@@ -1,15 +1,14 @@
 from __future__ import annotations
 
 import json
-import sys
+
+from tests.helpers import REPO_ROOT, load_module_from_path, run_module_main
 
 
-def test_main_selects_longest_counterpart_and_records_leftover(
-    tmp_path, monkeypatch, load_tools_module
-):
-    module = load_tools_module(
-        'test_build_paired_trace_signatures_module',
-        'build-paired-trace-signatures.py',
+def test_stage05_cli_selects_longest_counterpart_and_records_leftover(tmp_path):
+    module = load_module_from_path(
+        'test_stage05_cli_module',
+        REPO_ROOT / 'tools/run_pipeline.py',
     )
 
     signatures_dir = tmp_path / 'signatures'
@@ -56,19 +55,20 @@ def test_main_selects_longest_counterpart_and_records_leftover(
     )
 
     output_dir = tmp_path / 'paired-output'
-    monkeypatch.setattr(
-        sys,
-        'argv',
-        [
-            'build-paired-trace-signatures.py',
-            '--trace-jsonl',
-            str(trace_jsonl),
-            '--output-dir',
-            str(output_dir),
-        ],
-    )
 
-    assert module.main() == 0
+    assert (
+        run_module_main(
+            module,
+            [
+                'stage05',
+                '--trace-jsonl',
+                str(trace_jsonl),
+                '--output-dir',
+                str(output_dir),
+            ],
+        )
+        == 0
+    )
 
     pairs = [
         json.loads(line)

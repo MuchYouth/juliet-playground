@@ -15,7 +15,7 @@ python tools/run_pipeline.py stage03 78
 python tools/run_pipeline.py stage03 --files juliet-test-suite-v1.3/C/testcases/CWE78_OS_Command_Injection/s01/CWE78_OS_Command_Injection__char_console_execlp_52a.c
 
 # 기존 infer 결과에서 signature만 생성
-python tools/generate-signature.py --input-dir artifacts/infer-results/infer-2026.03.08-18:04:18
+python tools/run_pipeline.py stage03-signature --input-dir artifacts/infer-results/infer-2026.03.08-18:04:18
 ```
 
 ### 2) 전체 파이프라인
@@ -43,14 +43,19 @@ python tools/run_pipeline.py stage05 \
   --trace-jsonl artifacts/pipeline-runs/run-2026.03.09-22:18:32/04_trace_flow/trace_flow_match_strict.jsonl \
   --output-dir /tmp/paired-trace-ds
 
+# 옵션 없이 실행하면 최신 pipeline run의 strict trace를 찾아
+# 같은 run 아래 05_pair_trace_ds/ 로 출력
+python tools/run_pipeline.py stage05
+
 # paired_signatures로부터 slice 생성
 python tools/run_pipeline.py stage06 \
   --signature-db-dir artifacts/pipeline-runs/run-2026.03.09-22:18:32/05_pair_trace_ds/paired_signatures \
   --output-dir /tmp/paired-slices
-```
 
-최신 run 자동 탐색 같은 간편 기본값이 필요하면
-`tools/build-paired-trace-signatures.py`, `tools/generate_slices.py` wrapper도 계속 사용할 수 있습니다.
+# 옵션 없이 실행하면 최신 pipeline run의 paired_signatures를 찾아
+# 같은 run 아래 06_slices/ 로 출력
+python tools/run_pipeline.py stage06
+```
 
 ### 4) Patched counterpart export / Step 07 재실행
 
@@ -59,13 +64,7 @@ RUN_DIR=artifacts/pipeline-runs/run-2026.03.10-00:49:21
 
 # 기존 train_val 샘플들에 대응하는 patched counterpart 평가셋 생성
 python tools/run_pipeline.py stage07b \
-  --run-dir "$RUN_DIR" \
-  --pair-dir "$RUN_DIR/05_pair_trace_ds" \
-  --dataset-export-dir "$RUN_DIR/07_dataset_export" \
-  --signature-output-dir "$RUN_DIR/05_pair_trace_ds/train_patched_counterparts_signatures" \
-  --slice-output-dir "$RUN_DIR/06_slices/train_patched_counterparts" \
-  --output-pairs-jsonl "$RUN_DIR/05_pair_trace_ds/train_patched_counterparts_pairs.jsonl" \
-  --selection-summary-json "$RUN_DIR/05_pair_trace_ds/train_patched_counterparts_selection_summary.json"
+  --run-dir "$RUN_DIR"
 
 # 기존 run의 Step 07 + 07b를 새 timestamped 폴더로 다시 생성 (기본)
 python tools/run_pipeline.py rerun-step07 \
@@ -93,7 +92,7 @@ python tools/tokenize_slices.py \
 
 ## 운영 메모
 
-### `generate-signature.py`의 추출 대상
+### `stage03-signature`의 추출 대상
 
 - `infer-out/report.json`의 모든 이슈를 저장하지 않습니다.
 - 현재 구현은 `bug_type == TAINT_ERROR`만 대상으로 하며,
