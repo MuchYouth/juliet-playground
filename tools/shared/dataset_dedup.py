@@ -3,7 +3,7 @@ from __future__ import annotations
 from collections import Counter
 from typing import Any
 
-from shared.step07_normalize import normalized_code_md5
+from shared.dataset_normalize import normalized_code_md5
 
 ROLE_SORT_ORDER = {'b2b': 0, 'counterpart': 1}
 

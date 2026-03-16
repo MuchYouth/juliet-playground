@@ -162,7 +162,6 @@ def write_stub_plot(_results: list[dict[str, Any]], output_plot: Path | str) -> 
 @contextmanager
 def deterministic_tokenizer_context() -> Iterator[None]:
     ensure_repo_on_path()
-    import tokenize_slices
     from shared import slice_tokenizer
 
     def stub_load_tokenizer(_model_name: str) -> DummyTokenizer:
@@ -170,19 +169,13 @@ def deterministic_tokenizer_context() -> Iterator[None]:
 
     original_shared_load_tokenizer = slice_tokenizer.load_tokenizer
     original_shared_plot_distribution = slice_tokenizer.plot_distribution
-    original_load_tokenizer = tokenize_slices.load_tokenizer
-    original_plot_distribution = tokenize_slices.plot_distribution
     slice_tokenizer.load_tokenizer = stub_load_tokenizer
     slice_tokenizer.plot_distribution = write_stub_plot
-    tokenize_slices.load_tokenizer = stub_load_tokenizer
-    tokenize_slices.plot_distribution = write_stub_plot
     try:
         yield
     finally:
         slice_tokenizer.load_tokenizer = original_shared_load_tokenizer
         slice_tokenizer.plot_distribution = original_shared_plot_distribution
-        tokenize_slices.load_tokenizer = original_load_tokenizer
-        tokenize_slices.plot_distribution = original_plot_distribution
 
 
 def prepare_workspace(tmp_path: Path) -> tuple[Path, Path]:

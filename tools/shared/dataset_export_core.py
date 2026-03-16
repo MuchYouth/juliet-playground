@@ -6,9 +6,13 @@ from collections import Counter
 from pathlib import Path
 from typing import Any, Callable
 
-from shared.step07_dedup import ROLE_SORT_ORDER, dedupe_pairs_by_normalized_rows
-from shared.step07_normalize import normalize_slice_function_names
-from shared.step07_sources import find_slice_path, load_tree_sitter_parsers, normalize_artifact_path
+from shared.dataset_dedup import ROLE_SORT_ORDER, dedupe_pairs_by_normalized_rows
+from shared.dataset_normalize import normalize_slice_function_names
+from shared.dataset_sources import (
+    find_slice_path,
+    load_tree_sitter_parsers,
+    normalize_artifact_path,
+)
 
 
 def _validate_export_inputs(
