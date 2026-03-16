@@ -35,7 +35,6 @@ from stage import stage07_dataset_export as _stage07_dataset_export
 from stage import stage07b_patched_export as _stage07b_patched_export
 
 PrimaryDatasetExportParams = _stage07_dataset_export.PrimaryDatasetExportParams
-PrimaryDatasetExportResult = _stage07_dataset_export.PrimaryDatasetExportResult
 compute_pair_split = _stage07_dataset_export.compute_pair_split
 dedupe_pairs_by_normalized_rows = _dataset_dedup.dedupe_pairs_by_normalized_rows
 export_dataset_from_pipeline = _stage07_dataset_export.export_dataset_from_pipeline
@@ -102,8 +101,6 @@ class FullRunPaths:
 
 
 def _print_result(result: Any) -> int:
-    if hasattr(result, 'to_payload'):
-        result = result.to_payload()
     if isinstance(result, dict):
         print(json.dumps(result, ensure_ascii=False, indent=2))
         return 0
@@ -738,7 +735,7 @@ def run_step07_dataset_export(
     return _run_checked_stage_call(
         step_key='07_dataset_export',
         paths=paths,
-        runner=lambda params: export_primary_dataset(params).to_payload(),
+        runner=export_primary_dataset,
         params=PrimaryDatasetExportParams(
             pairs_jsonl=paths['pairs_jsonl'],
             paired_signatures_dir=paths['paired_signatures_dir'],
@@ -791,7 +788,7 @@ def run_step07b_train_patched_counterparts(
     return _run_checked_stage_call(
         step_key='07b_train_patched_counterparts_export',
         paths=paths,
-        runner=lambda params: export_patched_dataset(params).to_payload(),
+        runner=export_patched_dataset,
         params=PatchedDatasetExportParams(
             run_dir=paths['run_dir'],
             pair_dir=paths['pair_dir'],
@@ -1120,229 +1117,198 @@ def run_full_pipeline(
     return 0 if status == 'success' else 1
 
 
-def _run_full_command(args: argparse.Namespace) -> int:
-    try:
-        return run_full_pipeline(
-            cwes=args.cwes or None,
-            all_cwes=args.all_cwes,
-            files=args.files,
-            manifest=args.manifest,
-            source_root=args.source_root,
-            pipeline_root=args.pipeline_root,
-            run_id=args.run_id,
-            committed_taint_config=args.committed_taint_config,
-            pair_split_seed=args.pair_split_seed,
-            pair_train_ratio=args.pair_train_ratio,
-            dedup_mode=args.dedup_mode,
-        )
-    except ValueError as exc:
-        print(str(exc), file=sys.stderr)
-        return 2
-
-
-def _handle_stage01_command(args: argparse.Namespace) -> int:
-    return _print_result(
-        _stage01_manifest.scan_manifest_comments(
-            manifest=args.manifest,
-            source_root=args.source_root,
-            output_xml=args.output_xml,
-        )
-    )
-
-
-def _handle_stage02a_command(args: argparse.Namespace) -> int:
-    return _print_result(
-        _stage02a_taint.extract_unique_code_fields(
-            input_xml=args.input_xml,
-            source_root=args.source_root,
-            output_dir=args.output_dir,
-            pulse_taint_config_output=args.pulse_taint_config_output,
-        )
-    )
-
-
-def _handle_stage02b_command(args: argparse.Namespace) -> int:
-    return _print_result(
-        _stage02b_flow.run_stage02b_flow(
-            input_xml=args.input_xml,
-            source_root=args.source_root,
-            output_dir=args.output_dir,
-        )
-    )
-
-
-def _handle_stage03_command(args: argparse.Namespace) -> int:
-    return _print_result(
-        _stage03_infer.run_infer_and_signature(
-            cwes=args.cwes or None,
-            global_result=args.global_result,
-            all_cwes=args.all_cwes,
-            files=args.files,
-            pulse_taint_config=args.pulse_taint_config,
-            infer_results_root=args.infer_results_root,
-            signatures_root=args.signatures_root,
-            summary_json=args.summary_json,
-        )
-    )
-
-
-def _handle_stage03_signature_command(args: argparse.Namespace) -> int:
-    return int(
-        _stage03_signature.main(
-            input_dir=args.input_dir,
-            output_root=args.output_root,
-        )
-        or 0
-    )
-
-
-def _handle_stage04_command(args: argparse.Namespace) -> int:
-    return _print_result(
-        _stage04_trace_flow.filter_traces_by_flow(
-            flow_xml=args.flow_xml,
-            signatures_dir=args.signatures_dir,
-            output_dir=args.output_dir,
-        )
-    )
-
-
-def _handle_stage05_command(args: argparse.Namespace) -> int:
-    trace_jsonl, output_dir, run_dir = _stage05_pair_trace.resolve_paths(
-        trace_jsonl=args.trace_jsonl,
-        output_dir=args.output_dir,
-        pipeline_root=args.pipeline_root,
-        run_dir=args.run_dir,
-    )
-    return _print_result(
-        _stage05_pair_trace.build_paired_trace_dataset(
-            trace_jsonl=trace_jsonl,
-            output_dir=output_dir,
-            overwrite=args.overwrite,
-            run_dir=run_dir,
-        )
-    )
-
-
-def _handle_stage06_command(args: argparse.Namespace) -> int:
-    signature_db_dir, output_dir, _slice_dir, run_dir = _stage06_slices.resolve_paths(
-        signature_db_dir=args.signature_db_dir,
-        output_dir=args.output_dir,
-        pipeline_root=args.pipeline_root,
-        run_dir=args.run_dir,
-    )
-    return _print_result(
-        _stage06_slices.generate_slices(
-            signature_db_dir=signature_db_dir,
-            output_dir=output_dir,
-            old_prefix=args.old_prefix,
-            new_prefix=args.new_prefix,
-            overwrite=args.overwrite,
-            run_dir=run_dir,
-        )
-    )
-
-
-def _handle_stage07_command(args: argparse.Namespace) -> int:
-    return _print_result(
-        _stage07_dataset_export.export_primary_dataset(
-            _stage07_dataset_export.PrimaryDatasetExportParams(
-                pairs_jsonl=args.pairs_jsonl,
-                paired_signatures_dir=args.paired_signatures_dir,
-                slice_dir=args.slice_dir,
-                output_dir=args.output_dir,
-                split_seed=args.split_seed,
-                train_ratio=args.train_ratio,
-                dedup_mode=args.dedup_mode,
-            )
-        )
-    )
-
-
-def _build_stage07b_params(args: argparse.Namespace) -> PatchedDatasetExportParams:
-    paths = _stage07b_patched_export.resolve_paths(
-        run_dir=args.run_dir,
-        pair_dir=args.pair_dir,
-        dataset_export_dir=args.dataset_export_dir,
-        signature_output_dir=args.signature_output_dir,
-        slice_output_dir=args.slice_output_dir,
-        pipeline_root=args.pipeline_root,
-    )
-    _stage07b_patched_export.validate_args(
-        pair_dir=paths['pair_dir'],
-        dataset_export_dir=paths['dataset_export_dir'],
-        old_prefix=args.old_prefix,
-        new_prefix=args.new_prefix,
-    )
-    run_dir = paths['run_dir']
-    pair_dir = paths['pair_dir']
-    dataset_export_dir = paths['dataset_export_dir']
-    signature_output_dir = paths['signature_output_dir']
-    slice_output_dir = paths['slice_output_dir']
-    if (
-        run_dir is None
-        or pair_dir is None
-        or dataset_export_dir is None
-        or signature_output_dir is None
-        or slice_output_dir is None
-    ):
-        raise ValueError('Failed to resolve required stage07b paths.')
-
-    patched_pairing_paths = build_patched_pairing_paths(
-        pair_dir,
-        _stage07b_patched_export.DATASET_BASENAME,
-    )
-    output_pairs_jsonl = (
-        args.output_pairs_jsonl.resolve()
-        if args.output_pairs_jsonl is not None
-        else patched_pairing_paths['pairs_jsonl']
-    )
-    selection_summary_json = (
-        args.selection_summary_json.resolve()
-        if args.selection_summary_json is not None
-        else patched_pairing_paths['selection_summary_json']
-    )
-    return _stage07b_patched_export.PatchedDatasetExportParams(
-        run_dir=run_dir,
-        pair_dir=pair_dir,
-        dataset_export_dir=dataset_export_dir,
-        signature_output_dir=signature_output_dir,
-        slice_output_dir=slice_output_dir,
-        output_pairs_jsonl=output_pairs_jsonl,
-        selection_summary_json=selection_summary_json,
-        dedup_mode=args.dedup_mode,
-        overwrite=args.overwrite,
-        old_prefix=args.old_prefix,
-        new_prefix=args.new_prefix,
-    )
-
-
-def _handle_stage07b_command(args: argparse.Namespace) -> int:
-    return _print_result(
-        _stage07b_patched_export.export_patched_dataset(_build_stage07b_params(args))
-    )
-
-
-_COMMAND_HANDLERS: dict[str, Callable[[argparse.Namespace], int]] = {
-    'full': _run_full_command,
-    'stage01': _handle_stage01_command,
-    'stage02a': _handle_stage02a_command,
-    'stage02b': _handle_stage02b_command,
-    'stage03': _handle_stage03_command,
-    'stage03-signature': _handle_stage03_signature_command,
-    'stage04': _handle_stage04_command,
-    'stage05': _handle_stage05_command,
-    'stage06': _handle_stage06_command,
-    'stage07': _handle_stage07_command,
-    'stage07b': _handle_stage07b_command,
-}
-
-
 def main() -> int:
     args = parse_args()
-    handler = _COMMAND_HANDLERS.get(args.command)
-    if handler is None:
-        raise ValueError(f'Unsupported command: {args.command}')
-    return handler(args)
+
+    if args.command == 'full':
+        try:
+            return run_full_pipeline(
+                cwes=args.cwes or None,
+                all_cwes=args.all_cwes,
+                files=args.files,
+                manifest=args.manifest,
+                source_root=args.source_root,
+                pipeline_root=args.pipeline_root,
+                run_id=args.run_id,
+                committed_taint_config=args.committed_taint_config,
+                pair_split_seed=args.pair_split_seed,
+                pair_train_ratio=args.pair_train_ratio,
+                dedup_mode=args.dedup_mode,
+            )
+        except ValueError as exc:
+            print(str(exc), file=sys.stderr)
+            return 2
+
+    if args.command == 'stage01':
+        return _print_result(
+            _stage01_manifest.scan_manifest_comments(
+                manifest=args.manifest,
+                source_root=args.source_root,
+                output_xml=args.output_xml,
+            )
+        )
+
+    if args.command == 'stage02a':
+        return _print_result(
+            _stage02a_taint.extract_unique_code_fields(
+                input_xml=args.input_xml,
+                source_root=args.source_root,
+                output_dir=args.output_dir,
+                pulse_taint_config_output=args.pulse_taint_config_output,
+            )
+        )
+
+    if args.command == 'stage02b':
+        return _print_result(
+            _stage02b_flow.run_stage02b_flow(
+                input_xml=args.input_xml,
+                source_root=args.source_root,
+                output_dir=args.output_dir,
+            )
+        )
+
+    if args.command == 'stage03':
+        return _print_result(
+            _stage03_infer.run_infer_and_signature(
+                cwes=args.cwes or None,
+                global_result=args.global_result,
+                all_cwes=args.all_cwes,
+                files=args.files,
+                pulse_taint_config=args.pulse_taint_config,
+                infer_results_root=args.infer_results_root,
+                signatures_root=args.signatures_root,
+                summary_json=args.summary_json,
+            )
+        )
+
+    if args.command == 'stage03-signature':
+        return int(
+            _stage03_signature.main(
+                input_dir=args.input_dir,
+                output_root=args.output_root,
+            )
+            or 0
+        )
+
+    if args.command == 'stage04':
+        return _print_result(
+            _stage04_trace_flow.filter_traces_by_flow(
+                flow_xml=args.flow_xml,
+                signatures_dir=args.signatures_dir,
+                output_dir=args.output_dir,
+            )
+        )
+
+    if args.command == 'stage05':
+        trace_jsonl, output_dir, run_dir = _stage05_pair_trace.resolve_paths(
+            trace_jsonl=args.trace_jsonl,
+            output_dir=args.output_dir,
+            pipeline_root=args.pipeline_root,
+            run_dir=args.run_dir,
+        )
+        return _print_result(
+            _stage05_pair_trace.build_paired_trace_dataset(
+                trace_jsonl=trace_jsonl,
+                output_dir=output_dir,
+                overwrite=args.overwrite,
+                run_dir=run_dir,
+            )
+        )
+
+    if args.command == 'stage06':
+        signature_db_dir, output_dir, _slice_dir, run_dir = _stage06_slices.resolve_paths(
+            signature_db_dir=args.signature_db_dir,
+            output_dir=args.output_dir,
+            pipeline_root=args.pipeline_root,
+            run_dir=args.run_dir,
+        )
+        return _print_result(
+            _stage06_slices.generate_slices(
+                signature_db_dir=signature_db_dir,
+                output_dir=output_dir,
+                old_prefix=args.old_prefix,
+                new_prefix=args.new_prefix,
+                overwrite=args.overwrite,
+                run_dir=run_dir,
+            )
+        )
+
+    if args.command == 'stage07':
+        return _print_result(
+            _stage07_dataset_export.export_primary_dataset(
+                _stage07_dataset_export.PrimaryDatasetExportParams(
+                    pairs_jsonl=args.pairs_jsonl,
+                    paired_signatures_dir=args.paired_signatures_dir,
+                    slice_dir=args.slice_dir,
+                    output_dir=args.output_dir,
+                    split_seed=args.split_seed,
+                    train_ratio=args.train_ratio,
+                    dedup_mode=args.dedup_mode,
+                )
+            )
+        )
+
+    if args.command == 'stage07b':
+        paths = _stage07b_patched_export.resolve_paths(
+            run_dir=args.run_dir,
+            pair_dir=args.pair_dir,
+            dataset_export_dir=args.dataset_export_dir,
+            signature_output_dir=args.signature_output_dir,
+            slice_output_dir=args.slice_output_dir,
+            pipeline_root=args.pipeline_root,
+        )
+        _stage07b_patched_export.validate_args(
+            pair_dir=paths['pair_dir'],
+            dataset_export_dir=paths['dataset_export_dir'],
+            old_prefix=args.old_prefix,
+            new_prefix=args.new_prefix,
+        )
+        run_dir = paths['run_dir']
+        pair_dir = paths['pair_dir']
+        dataset_export_dir = paths['dataset_export_dir']
+        signature_output_dir = paths['signature_output_dir']
+        slice_output_dir = paths['slice_output_dir']
+        if (
+            run_dir is None
+            or pair_dir is None
+            or dataset_export_dir is None
+            or signature_output_dir is None
+            or slice_output_dir is None
+        ):
+            raise ValueError('Failed to resolve required stage07b paths.')
+        patched_pairing_paths = build_patched_pairing_paths(
+            pair_dir,
+            _stage07b_patched_export.DATASET_BASENAME,
+        )
+        output_pairs_jsonl = (
+            args.output_pairs_jsonl.resolve()
+            if args.output_pairs_jsonl is not None
+            else patched_pairing_paths['pairs_jsonl']
+        )
+        selection_summary_json = (
+            args.selection_summary_json.resolve()
+            if args.selection_summary_json is not None
+            else patched_pairing_paths['selection_summary_json']
+        )
+        return _print_result(
+            _stage07b_patched_export.export_patched_dataset(
+                _stage07b_patched_export.PatchedDatasetExportParams(
+                    run_dir=run_dir,
+                    pair_dir=pair_dir,
+                    dataset_export_dir=dataset_export_dir,
+                    signature_output_dir=signature_output_dir,
+                    slice_output_dir=slice_output_dir,
+                    output_pairs_jsonl=output_pairs_jsonl,
+                    selection_summary_json=selection_summary_json,
+                    dedup_mode=args.dedup_mode,
+                    overwrite=args.overwrite,
+                    old_prefix=args.old_prefix,
+                    new_prefix=args.new_prefix,
+                )
+            )
+        )
+
+    raise ValueError(f'Unsupported command: {args.command}')
 
 
 if __name__ == '__main__':

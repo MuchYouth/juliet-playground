@@ -87,13 +87,6 @@ def test_full_subcommand_runs_internal_orchestration_and_writes_summary(monkeypa
         write_text(kwargs['output_dir'] / 'summary.json', '{}\n')
         return {'summary_json': str(kwargs['output_dir'] / 'summary.json')}
 
-    class FakePrimaryResult:
-        def __init__(self, output_dir):
-            self.output_dir = output_dir
-
-        def to_payload(self):
-            return {'summary_json': str(self.output_dir / 'summary.json')}
-
     def fake_export_primary_dataset(params):
         called.append('07_dataset_export')
         print('stage07 ok')
@@ -107,18 +100,7 @@ def test_full_subcommand_runs_internal_orchestration_and_writes_summary(monkeypa
             params.output_dir / 'summary.json',
         ]:
             write_text(output_path, 'ok\n')
-        return FakePrimaryResult(params.output_dir)
-
-    class FakePatchedResult:
-        def __init__(self, dataset_export_dir):
-            self.dataset_export_dir = dataset_export_dir
-
-        def to_payload(self):
-            return {
-                'summary_json': str(
-                    self.dataset_export_dir / 'train_patched_counterparts_summary.json'
-                )
-            }
+        return {'summary_json': str(params.output_dir / 'summary.json')}
 
     def fake_export_patched_dataset(params):
         called.append('07b_train_patched_counterparts_export')
@@ -141,7 +123,11 @@ def test_full_subcommand_runs_internal_orchestration_and_writes_summary(monkeypa
             parents=True,
             exist_ok=True,
         )
-        return FakePatchedResult(params.dataset_export_dir)
+        return {
+            'summary_json': str(
+                params.dataset_export_dir / 'train_patched_counterparts_summary.json'
+            )
+        }
 
     monkeypatch.setattr(
         module._stage01_manifest, 'scan_manifest_comments', fake_scan_manifest_comments
@@ -458,13 +444,9 @@ def test_stage07_subcommand_delegates(monkeypatch, tmp_path):
 
     captured: dict[str, object] = {}
 
-    class FakeResult:
-        def to_payload(self):
-            return {'summary_json': str(tmp_path / 'summary.json')}
-
     def fake_export_primary_dataset(params):
         captured['params'] = params
-        return FakeResult()
+        return {'summary_json': str(tmp_path / 'summary.json')}
 
     monkeypatch.setattr(
         module._stage07_dataset_export, 'export_primary_dataset', fake_export_primary_dataset
@@ -504,13 +486,9 @@ def test_stage07b_subcommand_delegates(monkeypatch, tmp_path):
 
     captured: dict[str, object] = {}
 
-    class FakeResult:
-        def to_payload(self):
-            return {'summary_json': str(tmp_path / 'summary.json')}
-
     def fake_export_patched_dataset(params):
         captured['params'] = params
-        return FakeResult()
+        return {'summary_json': str(tmp_path / 'summary.json')}
 
     monkeypatch.setattr(
         module._stage07b_patched_export, 'export_patched_dataset', fake_export_patched_dataset

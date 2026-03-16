@@ -171,19 +171,6 @@ def test_run_step07_dataset_export_uses_primary_dataset_api(tmp_path, monkeypatc
     )
     captured: dict[str, object] = {}
 
-    class FakeResult:
-        def to_payload(self):
-            return {
-                'summary_json': str(paths['dataset_summary_json']),
-                'output_dir': str(paths['dataset_stage_dir']),
-                'normalized_slices_dir': str(paths['normalized_slices_dir']),
-                'real_vul_data_csv': str(paths['real_vul_data_csv']),
-                'dedup_dropped_csv': str(paths['real_vul_data_dedup_dropped_csv']),
-                'normalized_token_counts_csv': str(paths['normalized_token_counts_csv']),
-                'slice_token_distribution_png': str(paths['slice_token_distribution_png']),
-                'split_manifest_json': str(paths['dataset_split_manifest_json']),
-            }
-
     def fake_export_primary_dataset(params):
         captured['params'] = params
         paths['normalized_slices_dir'].mkdir(parents=True, exist_ok=True)
@@ -196,7 +183,16 @@ def test_run_step07_dataset_export_uses_primary_dataset_api(tmp_path, monkeypatc
             paths['dataset_summary_json'],
         ]:
             write_text(output_path, 'ok\n')
-        return FakeResult()
+        return {
+            'summary_json': str(paths['dataset_summary_json']),
+            'output_dir': str(paths['dataset_stage_dir']),
+            'normalized_slices_dir': str(paths['normalized_slices_dir']),
+            'real_vul_data_csv': str(paths['real_vul_data_csv']),
+            'dedup_dropped_csv': str(paths['real_vul_data_dedup_dropped_csv']),
+            'normalized_token_counts_csv': str(paths['normalized_token_counts_csv']),
+            'slice_token_distribution_png': str(paths['slice_token_distribution_png']),
+            'split_manifest_json': str(paths['dataset_split_manifest_json']),
+        }
 
     monkeypatch.setattr(module, 'export_primary_dataset', fake_export_primary_dataset)
     monkeypatch.setattr(module, 'run_internal_step', lambda step_key, logs_dir, fn: fn())
@@ -276,13 +272,6 @@ def test_run_step07b_train_patched_counterparts_uses_stage_api(tmp_path, monkeyp
     )
     captured: dict[str, object] = {}
 
-    class FakeResult:
-        def to_payload(self):
-            return {
-                'summary_json': str(paths['train_patched_counterparts_summary_json']),
-                'pairs_jsonl': str(paths['train_patched_counterparts_pairs_jsonl']),
-            }
-
     def fake_export_patched_dataset(params):
         captured['params'] = params
         paths['train_patched_counterparts_signatures_dir'].mkdir(parents=True, exist_ok=True)
@@ -300,7 +289,10 @@ def test_run_step07b_train_patched_counterparts_uses_stage_api(tmp_path, monkeyp
         ]:
             write_text(output_path, 'ok\n')
         paths['train_patched_counterparts_slices_dir'].mkdir(parents=True, exist_ok=True)
-        return FakeResult()
+        return {
+            'summary_json': str(paths['train_patched_counterparts_summary_json']),
+            'pairs_jsonl': str(paths['train_patched_counterparts_pairs_jsonl']),
+        }
 
     monkeypatch.setattr(module, 'export_patched_dataset', fake_export_patched_dataset)
     monkeypatch.setattr(module, 'run_internal_step', lambda step_key, logs_dir, fn: fn())

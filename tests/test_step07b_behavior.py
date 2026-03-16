@@ -317,8 +317,10 @@ def test_export_patched_dataset_runs_selection_slice_and_export(tmp_path, monkey
     assert captured['slice_args']['summary_metadata'] == {
         'dataset_basename': module.DATASET_BASENAME
     }
-    assert result.summary_json == dataset_export_dir / 'train_patched_counterparts_summary.json'
-    assert result.slice_summary_json == tmp_path / 'slice-out' / 'summary.json'
+    assert result['summary_json'] == str(
+        dataset_export_dir / 'train_patched_counterparts_summary.json'
+    )
+    assert result['slice_summary_json'] == str(tmp_path / 'slice-out' / 'summary.json')
 
 
 def test_resolve_paths_and_validate_args_use_explicit_inputs(tmp_path):
