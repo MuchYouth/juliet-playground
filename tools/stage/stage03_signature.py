@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 from __future__ import annotations
 
 import datetime
@@ -140,20 +139,21 @@ def generate_signatures(
     return output_dir
 
 
-def main(
-    input_dir: Path = typer.Option(None, '--input-dir', help='Input infer-* directory'),
-    output_root: Path = typer.Option(
-        Path(RESULT_DIR) / 'signatures',
-        '--output-root',
-        help='Root directory for signatures output',
-    ),
-):
-    if input_dir is None:
-        input_dir = find_latest_infer_run_dir(Path(INFER_RESULTS_DIR))
-
-    output_dir = generate_signatures(input_dir=input_dir, output_root=output_root)
-    print(f'Signatures generated at: {output_dir}')
-
-
-if __name__ == '__main__':
-    typer.run(main)
+def run_signature_generation(
+    *,
+    input_dir: Path | None,
+    output_root: Path,
+) -> dict[str, str]:
+    resolved_input_dir = (
+        input_dir.resolve()
+        if input_dir is not None
+        else find_latest_infer_run_dir(Path(INFER_RESULTS_DIR))
+    )
+    output_dir = generate_signatures(
+        input_dir=resolved_input_dir, output_root=output_root.resolve()
+    )
+    return {
+        'input_dir': str(resolved_input_dir),
+        'output_root': str(output_root.resolve()),
+        'output_dir': str(output_dir),
+    }

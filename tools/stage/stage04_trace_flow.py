@@ -1,7 +1,5 @@
-#!/usr/bin/env python3
 from __future__ import annotations
 
-import argparse
 import json
 import xml.etree.ElementTree as ET
 from collections import Counter, defaultdict
@@ -228,27 +226,3 @@ def filter_traces_by_flow(
     write_json(summary_path, summary)
     print(json.dumps(summary, ensure_ascii=False))
     return summary
-
-
-def main() -> int:
-    parser = argparse.ArgumentParser(description='Filter signature traces by testcase flow tags.')
-    parser.add_argument('--flow-xml', type=Path, required=True)
-    parser.add_argument(
-        '--signatures-dir',
-        type=Path,
-        required=True,
-        help='Full path to a non_empty signatures dir',
-    )
-    parser.add_argument('--output-dir', type=Path, required=True)
-    args = parser.parse_args()
-
-    filter_traces_by_flow(
-        flow_xml=args.flow_xml,
-        signatures_dir=args.signatures_dir,
-        output_dir=args.output_dir,
-    )
-    return 0
-
-
-if __name__ == '__main__':
-    raise SystemExit(main())

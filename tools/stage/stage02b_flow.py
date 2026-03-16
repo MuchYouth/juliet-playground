@@ -1,7 +1,5 @@
-#!/usr/bin/env python3
 from __future__ import annotations
 
-import argparse
 import copy
 import csv
 import json
@@ -12,6 +10,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
+from shared.artifact_layout import PathBundle
 from shared.csvio import write_csv_rows
 from shared.jsonio import write_json
 from shared.jsonio import write_jsonl as _write_jsonl
@@ -19,33 +18,6 @@ from shared.juliet_manifest import build_manifest_source_index
 
 TARGET_TAGS = {'comment_flaw', 'comment_fix'}
 C_IDENTIFIER_RE = re.compile(r'^[A-Za-z_][A-Za-z0-9_]*$')
-
-
-def parse_args_extract() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(
-        description='Extract function-name inventory from manifest_with_comments.xml'
-    )
-    parser.add_argument(
-        '--input-xml',
-        type=Path,
-        default=Path(
-            'experiments/epic001_manifest_comment_scan/outputs/manifest_with_comments.xml'
-        ),
-        help='Input XML containing comment_flaw/comment_fix tags',
-    )
-    parser.add_argument(
-        '--output-csv',
-        type=Path,
-        default=Path('experiments/epic001b_function_inventory/outputs/function_names_unique.csv'),
-        help='Output CSV path for unique function names and counts',
-    )
-    parser.add_argument(
-        '--output-summary',
-        type=Path,
-        default=Path('experiments/epic001b_function_inventory/outputs/summary.json'),
-        help='Output JSON path for summary stats',
-    )
-    return parser.parse_args()
 
 
 def extract_function_inventory(
@@ -118,17 +90,6 @@ def extract_function_inventory(
     }
 
 
-def main_extract() -> int:
-    args = parse_args_extract()
-    payload = extract_function_inventory(
-        input_xml=args.input_xml,
-        output_csv=args.output_csv,
-        output_summary=args.output_summary,
-    )
-    print(json.dumps(payload, ensure_ascii=False))
-    return 0
-
-
 PYC_C_FUNC_RE = re.compile(
     r'^(CWE|cwe)(?P<cwe_number>\d+)_(?P<cwe_name>.*)__(?P<function_variant>.*)_(?P<flow_variant>\d+)(?P<subfile_id>[a-z]*)_(?P<function_name>[^.]*)$',
     re.IGNORECASE,
@@ -170,43 +131,26 @@ class FunctionRow:
         }
 
 
-def parse_args_categorize() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(
-        description='Categorize function names into flow_family/operation_role groups.'
+@dataclass(frozen=True)
+class Stage02BOutputPaths(PathBundle):
+    output_dir: Path
+    function_names_unique_csv: Path
+    function_inventory_summary_json: Path
+    function_names_categorized_jsonl: Path
+    grouped_family_role_json: Path
+    category_summary_json: Path
+    manifest_with_testcase_flows_xml: Path
+    testcase_flow_summary_json: Path
+
+    _required_fields = (
+        'function_names_unique_csv',
+        'function_inventory_summary_json',
+        'function_names_categorized_jsonl',
+        'grouped_family_role_json',
+        'category_summary_json',
+        'manifest_with_testcase_flows_xml',
+        'testcase_flow_summary_json',
     )
-    parser.add_argument(
-        '--input-csv',
-        type=Path,
-        default=Path('experiments/epic001b_function_inventory/outputs/function_names_unique.csv'),
-    )
-    parser.add_argument(
-        '--manifest-xml',
-        type=Path,
-        default=Path(
-            'experiments/epic001_manifest_comment_scan/outputs/manifest_with_comments.xml'
-        ),
-    )
-    parser.add_argument(
-        '--source-root', type=Path, default=Path('juliet-test-suite-v1.3/C/testcases')
-    )
-    parser.add_argument(
-        '--output-jsonl',
-        type=Path,
-        default=Path(
-            'experiments/epic001b_function_inventory/outputs/function_names_categorized.jsonl'
-        ),
-    )
-    parser.add_argument(
-        '--output-nested-json',
-        type=Path,
-        default=Path('experiments/epic001b_function_inventory/outputs/grouped_family_role.json'),
-    )
-    parser.add_argument(
-        '--output-summary',
-        type=Path,
-        default=Path('experiments/epic001b_function_inventory/outputs/category_summary.json'),
-    )
-    return parser.parse_args()
 
 
 def split_simple_name(function_name: str) -> str:
@@ -552,16 +496,17 @@ def build_summary(
     }
 
 
-def build_stage02b_output_paths(output_dir: Path) -> dict[str, Path]:
-    return {
-        'function_names_unique_csv': output_dir / 'function_names_unique.csv',
-        'function_inventory_summary_json': output_dir / 'function_inventory_summary.json',
-        'function_names_categorized_jsonl': output_dir / 'function_names_categorized.jsonl',
-        'grouped_family_role_json': output_dir / 'grouped_family_role.json',
-        'category_summary_json': output_dir / 'category_summary.json',
-        'manifest_with_testcase_flows_xml': output_dir / 'manifest_with_testcase_flows.xml',
-        'testcase_flow_summary_json': output_dir / 'testcase_flow_summary.json',
-    }
+def build_stage02b_output_paths(output_dir: Path) -> Stage02BOutputPaths:
+    return Stage02BOutputPaths(
+        output_dir=output_dir,
+        function_names_unique_csv=output_dir / 'function_names_unique.csv',
+        function_inventory_summary_json=output_dir / 'function_inventory_summary.json',
+        function_names_categorized_jsonl=output_dir / 'function_names_categorized.jsonl',
+        grouped_family_role_json=output_dir / 'grouped_family_role.json',
+        category_summary_json=output_dir / 'category_summary.json',
+        manifest_with_testcase_flows_xml=output_dir / 'manifest_with_testcase_flows.xml',
+        testcase_flow_summary_json=output_dir / 'testcase_flow_summary.json',
+    )
 
 
 def categorize_function_names(
@@ -617,20 +562,6 @@ def categorize_function_names(
         'total_unique_function_names': len(rows),
         'total_weighted_count': sum(r.count for r in rows),
     }
-
-
-def main_categorize() -> int:
-    args = parse_args_categorize()
-    payload = categorize_function_names(
-        input_csv=args.input_csv,
-        manifest_xml=args.manifest_xml,
-        source_root=args.source_root,
-        output_jsonl=args.output_jsonl,
-        output_nested_json=args.output_nested_json,
-        output_summary=args.output_summary,
-    )
-    print(json.dumps(payload, ensure_ascii=False))
-    return 0
 
 
 FLOW_PARTITION_TARGET_TAGS = ('comment_flaw', 'comment_fix', 'flaw')
@@ -804,78 +735,27 @@ def run_stage02b_flow(*, input_xml: Path, source_root: Path, output_dir: Path) -
 
     extract_result = extract_function_inventory(
         input_xml=input_xml,
-        output_csv=output_paths['function_names_unique_csv'],
-        output_summary=output_paths['function_inventory_summary_json'],
+        output_csv=output_paths.function_names_unique_csv,
+        output_summary=output_paths.function_inventory_summary_json,
     )
     categorize_result = categorize_function_names(
-        input_csv=output_paths['function_names_unique_csv'],
+        input_csv=output_paths.function_names_unique_csv,
         manifest_xml=input_xml,
         source_root=source_root,
-        output_jsonl=output_paths['function_names_categorized_jsonl'],
-        output_nested_json=output_paths['grouped_family_role_json'],
-        output_summary=output_paths['category_summary_json'],
+        output_jsonl=output_paths.function_names_categorized_jsonl,
+        output_nested_json=output_paths.grouped_family_role_json,
+        output_summary=output_paths.category_summary_json,
     )
     partition_result = add_flow_tags_to_testcase(
         input_xml=input_xml,
-        function_categories_jsonl=output_paths['function_names_categorized_jsonl'],
-        output_xml=output_paths['manifest_with_testcase_flows_xml'],
-        summary_json=output_paths['testcase_flow_summary_json'],
+        function_categories_jsonl=output_paths.function_names_categorized_jsonl,
+        output_xml=output_paths.manifest_with_testcase_flows_xml,
+        summary_json=output_paths.testcase_flow_summary_json,
     )
 
     return {
-        'output_dir': str(output_dir),
-        'function_names_unique_csv': str(output_paths['function_names_unique_csv']),
-        'function_inventory_summary_json': str(output_paths['function_inventory_summary_json']),
-        'function_names_categorized_jsonl': str(output_paths['function_names_categorized_jsonl']),
-        'grouped_family_role_json': str(output_paths['grouped_family_role_json']),
-        'category_summary_json': str(output_paths['category_summary_json']),
-        'manifest_with_testcase_flows_xml': str(output_paths['manifest_with_testcase_flows_xml']),
-        'testcase_flow_summary_json': str(output_paths['testcase_flow_summary_json']),
+        **output_paths.to_payload(include=('output_dir', *output_paths._required_fields)),
         'extract_result': extract_result,
         'categorize_result': categorize_result,
         'partition_result': partition_result,
     }
-
-
-def main_partition() -> int:
-    parser = argparse.ArgumentParser(description='Add per-testcase flow tags (b2b/b2g/g2b).')
-    parser.add_argument(
-        '--input-xml',
-        type=Path,
-        default=Path(
-            'experiments/epic001_manifest_comment_scan/outputs/manifest_with_comments.xml'
-        ),
-    )
-    parser.add_argument(
-        '--function-categories-jsonl',
-        type=Path,
-        default=Path(
-            'experiments/epic001b_function_inventory/outputs/function_names_categorized.jsonl'
-        ),
-    )
-    parser.add_argument(
-        '--output-xml',
-        type=Path,
-        default=Path(
-            'experiments/epic001c_testcase_flow_partition/outputs/manifest_with_testcase_flows.xml'
-        ),
-    )
-    parser.add_argument(
-        '--summary-json',
-        type=Path,
-        default=Path('experiments/epic001c_testcase_flow_partition/outputs/summary.json'),
-    )
-    args = parser.parse_args()
-
-    payload = add_flow_tags_to_testcase(
-        input_xml=args.input_xml,
-        function_categories_jsonl=args.function_categories_jsonl,
-        output_xml=args.output_xml,
-        summary_json=args.summary_json,
-    )
-    print(json.dumps(payload, ensure_ascii=False))
-    return 0
-
-
-if __name__ == '__main__':
-    raise SystemExit(main_extract())

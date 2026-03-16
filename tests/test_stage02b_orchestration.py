@@ -18,22 +18,30 @@ def test_build_stage02b_output_paths_matches_pipeline_layout(tmp_path):
     pipeline_paths = pipeline_module._build_full_run_paths(run_dir=run_dir, source_root=source_root)
     stage02b_paths = stage02b_module.build_stage02b_output_paths(pipeline_paths.flow_dir)
 
-    assert pipeline_paths.function_names_unique_csv == stage02b_paths['function_names_unique_csv']
     assert (
-        pipeline_paths.function_inventory_summary_json
-        == stage02b_paths['function_inventory_summary_json']
+        pipeline_paths.stage02b.function_names_unique_csv
+        == stage02b_paths.function_names_unique_csv
     )
     assert (
-        pipeline_paths.function_names_categorized_jsonl
-        == stage02b_paths['function_names_categorized_jsonl']
+        pipeline_paths.stage02b.function_inventory_summary_json
+        == stage02b_paths.function_inventory_summary_json
     )
-    assert pipeline_paths.grouped_family_role_json == stage02b_paths['grouped_family_role_json']
-    assert pipeline_paths.category_summary_json == stage02b_paths['category_summary_json']
     assert (
-        pipeline_paths.manifest_with_testcase_flows_xml
-        == stage02b_paths['manifest_with_testcase_flows_xml']
+        pipeline_paths.stage02b.function_names_categorized_jsonl
+        == stage02b_paths.function_names_categorized_jsonl
     )
-    assert pipeline_paths.testcase_flow_summary_json == stage02b_paths['testcase_flow_summary_json']
+    assert (
+        pipeline_paths.stage02b.grouped_family_role_json == stage02b_paths.grouped_family_role_json
+    )
+    assert pipeline_paths.stage02b.category_summary_json == stage02b_paths.category_summary_json
+    assert (
+        pipeline_paths.stage02b.manifest_with_testcase_flows_xml
+        == stage02b_paths.manifest_with_testcase_flows_xml
+    )
+    assert (
+        pipeline_paths.stage02b.testcase_flow_summary_json
+        == stage02b_paths.testcase_flow_summary_json
+    )
 
 
 def test_run_stage02b_flow_uses_shared_output_paths(tmp_path, monkeypatch):
@@ -75,9 +83,7 @@ def test_run_stage02b_flow_uses_shared_output_paths(tmp_path, monkeypatch):
         output_dir=output_dir,
     )
 
-    assert captured['extract']['output_csv'] == expected_paths['function_names_unique_csv']
-    assert (
-        captured['categorize']['output_jsonl'] == expected_paths['function_names_categorized_jsonl']
-    )
-    assert captured['partition']['output_xml'] == expected_paths['manifest_with_testcase_flows_xml']
-    assert result['function_names_unique_csv'] == str(expected_paths['function_names_unique_csv'])
+    assert captured['extract']['output_csv'] == expected_paths.function_names_unique_csv
+    assert captured['categorize']['output_jsonl'] == expected_paths.function_names_categorized_jsonl
+    assert captured['partition']['output_xml'] == expected_paths.manifest_with_testcase_flows_xml
+    assert result['function_names_unique_csv'] == str(expected_paths.function_names_unique_csv)
