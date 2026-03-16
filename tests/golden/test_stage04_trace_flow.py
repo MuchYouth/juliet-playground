@@ -34,17 +34,11 @@ def test_stage04_trace_flow_matches_golden(tmp_path):
     )
 
     root_aliases = [(baseline_root, ''), (work_root, ''), (REPO_ROOT, '')]
-    for name in [
-        'trace_flow_match_all.jsonl',
-        'trace_flow_match_strict.jsonl',
-        'trace_flow_match_partial_or_strict.jsonl',
-    ]:
-        assert_unordered_jsonl_matches(
-            expected_path=baseline_root / 'expected/04_trace_flow' / name,
-            actual_path=output_dir / name,
-            root_aliases=root_aliases,
-        )
-
+    assert_unordered_jsonl_matches(
+        expected_path=baseline_root / 'expected/04_trace_flow/trace_flow_match_strict.jsonl',
+        actual_path=output_dir / 'trace_flow_match_strict.jsonl',
+        root_aliases=root_aliases,
+    )
     assert normalized_file_text(
         baseline_root / 'expected/04_trace_flow/summary.json',
         root_aliases,

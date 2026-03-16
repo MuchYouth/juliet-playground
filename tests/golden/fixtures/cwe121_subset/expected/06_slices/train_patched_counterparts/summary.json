@@ -1,20 +1,18 @@
 {
-  "counts": {
+  "artifacts": {
+    "output_dir": "expected/06_slices/train_patched_counterparts",
+    "slice_dir": "expected/06_slices/train_patched_counterparts/slice",
+    "summary_json": "expected/06_slices/train_patched_counterparts/summary.json"
+  },
+  "stats": {
+    "total_slices": 6,
     "generated": 6,
-    "json_files_total": 6,
-    "testcase_dirs_total": 3
-  },
-  "dataset_basename": "train_patched_counterparts",
-  "errors": 0,
-  "new_prefix": null,
-  "old_prefix": null,
-  "output_dir": "expected/06_slices/train_patched_counterparts",
-  "run_dir": "expected",
-  "signature_db_dir": "expected/05_pair_trace_ds/train_patched_counterparts_signatures",
-  "signature_db_dirs_total": 3,
-  "slice_dir": "expected/06_slices/train_patched_counterparts/slice",
-  "slice_extension_counts": {
-    ".c": 6
-  },
-  "total_slices": 6
+    "skipped": 0,
+    "errors": 0,
+    "counts": {
+      "testcase_dirs_total": 3,
+      "json_files_total": 6,
+      "generated": 6
+    }
+  }
 }

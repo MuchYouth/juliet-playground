@@ -1,2 +1,2 @@
-{"bodies": ["+ 2)"], "name": "CHAR_ARRAY_SIZE"}
-{"bodies": ["_snprintf", "snprintf"], "name": "SNPRINTF"}
+{"name": "CHAR_ARRAY_SIZE", "bodies": ["+ 2)"]}
+{"name": "SNPRINTF", "bodies": ["_snprintf", "snprintf"]}

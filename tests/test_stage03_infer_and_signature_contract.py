@@ -64,41 +64,25 @@ def test_stage03_infer_and_signature_contract(monkeypatch, tmp_path):
         summary_json=summary_json,
     )
 
-    assert result['signature_output_dir']
     assert summary_json.exists()
 
     summary = json.loads(summary_json.read_text(encoding='utf-8'))
-    required_keys = {
-        'infer_run_dir',
-        'signature_output_dir',
-        'signature_non_empty_dir',
-        'analysis_result_csv',
-        'analysis_no_issue_files',
-        'result_by_target',
-        'totals',
+    assert set(summary) == {'artifacts', 'stats'}
+    assert set(summary['artifacts']) == {'infer_run_dir', 'signature_output_dir', 'signature_non_empty_dir'}
+    assert set(summary['stats']) == {
+        'issue',
+        'no_issue',
+        'error',
+        'total_cases',
+        'elapsed_seconds',
+        'targets_analyzed',
     }
-    assert required_keys.issubset(summary.keys())
 
-    signature_non_empty_dir = Path(summary['signature_non_empty_dir'])
+    signature_non_empty_dir = Path(summary['artifacts']['signature_non_empty_dir'])
     assert signature_non_empty_dir.exists()
     assert any(signature_non_empty_dir.rglob('*.json'))
-
-    assert Path(summary['analysis_result_csv']).exists()
-    assert Path(summary['analysis_no_issue_files']).exists()
-
-    totals = summary['totals']
-    assert set(totals) == {'issue', 'no_issue', 'error', 'total_cases', 'elapsed_seconds'}
-    assert totals['issue'] == 1
-    assert totals['no_issue'] == 1
-    assert totals['error'] == 0
-    assert totals['total_cases'] == 2
-
-    result_by_target = summary['result_by_target']
-    assert set(result_by_target) == {'FILES'}
-    assert result_by_target['FILES'] == {
-        'issue': 1,
-        'no_issue': 1,
-        'error': 0,
-        'time': 1.25,
-        'total_cases': 2,
-    }
+    assert summary['stats']['issue'] == 1
+    assert summary['stats']['no_issue'] == 1
+    assert summary['stats']['error'] == 0
+    assert summary['stats']['total_cases'] == 2
+    assert result['artifacts']['signature_output_dir'] == summary['artifacts']['signature_output_dir']

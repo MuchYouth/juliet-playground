@@ -19,7 +19,6 @@ def test_stage05_pair_trace_contract(tmp_path, monkeypatch):
 
     monkeypatch.chdir(baseline_root)
     output_dir = work_root / 'expected/05_pair_trace_ds'
-    monkeypatch.chdir(baseline_root)
     module.build_paired_trace_dataset(
         trace_jsonl=baseline_root / 'expected/04_trace_flow/trace_flow_match_strict.jsonl',
         output_dir=output_dir,
@@ -32,34 +31,15 @@ def test_stage05_pair_trace_contract(tmp_path, monkeypatch):
     for path in [pairs_path, leftovers_path, paired_signatures_dir, summary_path]:
         assert path.exists()
 
-    pairs = [
-        json.loads(line) for line in pairs_path.read_text(encoding='utf-8').splitlines() if line
-    ]
+    pairs = [json.loads(line) for line in pairs_path.read_text(encoding='utf-8').splitlines() if line]
     assert pairs
     for pair in pairs:
-        assert {
-            'pair_id',
-            'testcase_key',
-            'b2b_flow_type',
-            'counterpart_flow_type',
-            'output_files',
-        } <= set(pair)
+        assert {'pair_id', 'testcase_key', 'counterpart_flow_type', 'b2b_path', 'counterpart_path'} <= set(pair)
         assert pair['pair_id']
-        assert pair['b2b_flow_type'] == 'b2b'
-        assert pair['counterpart_flow_type']
         assert pair['counterpart_flow_type'] != 'b2b'
-
-        b2b_path = Path(pair['output_files']['b2b'])
-        counterpart_path = Path(pair['output_files'][pair['counterpart_flow_type']])
-        assert b2b_path.exists()
-        assert counterpart_path.exists()
-
-        for role_path in [b2b_path, counterpart_path]:
-            exported = json.loads(role_path.read_text(encoding='utf-8'))
-            assert 'pairing_meta' in exported
-            assert exported['pairing_meta']['pair_id'] == pair['pair_id']
+        assert Path(pair['b2b_path']).exists()
+        assert Path(pair['counterpart_path']).exists()
 
     summary = json.loads(summary_path.read_text(encoding='utf-8'))
-    assert {'records_total', 'summary_counts', 'paired_testcases', 'leftover_counterparts'} <= set(
-        summary
-    )
+    assert set(summary) == {'artifacts', 'stats'}
+    assert {'records_total', 'paired_testcases', 'leftover_counterparts'} <= set(summary['stats'])

@@ -34,6 +34,7 @@ def test_stage06_slices_contract(tmp_path):
         assert path.read_text(encoding='utf-8').strip()
 
     summary = json.loads(summary_path.read_text(encoding='utf-8'))
-    assert {'signature_db_dir', 'output_dir', 'slice_dir', 'total_slices', 'counts'} <= set(summary)
-    assert summary['total_slices'] == len(slice_files)
-    assert summary['counts']['generated'] == len(slice_files)
+    assert set(summary) == {'artifacts', 'stats'}
+    assert summary['artifacts']['slice_dir'] == str(slice_dir)
+    assert summary['stats']['total_slices'] == len(slice_files)
+    assert summary['stats']['generated'] == len(slice_files)

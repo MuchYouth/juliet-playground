@@ -27,8 +27,8 @@ def test_primary_dataset_export_uses_shared_step07_core(tmp_path, monkeypatch):
     def fake_run_configured(request):
         captured['request'] = request
         return {
-            'dataset': request.export_paths.to_payload(),
-            'counts': {},
+            'artifacts': {k: str(v) for k, v in request.export_paths.items()},
+            'stats': {},
         }
 
     monkeypatch.setattr(module, 'run_configured_step07_export', fake_run_configured)
@@ -43,7 +43,7 @@ def test_primary_dataset_export_uses_shared_step07_core(tmp_path, monkeypatch):
         dedup_mode='row',
     )
 
-    assert result['dataset']['csv_path'].endswith('Real_Vul_data.csv')
+    assert result['artifacts']['csv_path'].endswith('Real_Vul_data.csv')
     request = captured['request']
     split_assignments = request.split_assignments_fn(['pair-a', 'pair-b'])
     assert split_assignments.keys() == {'pair-a', 'pair-b'}
@@ -73,8 +73,8 @@ def test_patched_counterparts_uses_shared_step07_core(tmp_path, monkeypatch):
     def fake_run_configured(request):
         captured['request'] = request
         return {
-            'dataset': request.export_paths.to_payload(),
-            'counts': {'pairs_total': 2},
+            'artifacts': {k: str(v) for k, v in request.export_paths.items()},
+            'stats': {'counts': {'pairs_total': 2}},
         }
 
     monkeypatch.setattr(module, 'run_configured_step07_export', fake_run_configured)
@@ -88,7 +88,7 @@ def test_patched_counterparts_uses_shared_step07_core(tmp_path, monkeypatch):
         dedup_mode='none',
     )
 
-    assert result.csv_path.name == 'train_patched_counterparts.csv'
+    assert result['artifacts']['csv_path'].endswith('train_patched_counterparts.csv')
     request = captured['request']
     assert request.split_assignments_fn(['pair-a', 'pair-b']) == {
         'pair-a': 'train_val',

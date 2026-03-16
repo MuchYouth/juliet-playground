@@ -56,11 +56,7 @@ def test_stage05_cli_selects_longest_counterpart_and_records_leftover(tmp_path):
     )
 
     output_dir = tmp_path / 'paired-output'
-
-    module.build_paired_trace_dataset(
-        trace_jsonl=trace_jsonl,
-        output_dir=output_dir,
-    )
+    module.build_paired_trace_dataset(trace_jsonl=trace_jsonl, output_dir=output_dir)
 
     pairs = [
         json.loads(line)
@@ -68,6 +64,8 @@ def test_stage05_cli_selects_longest_counterpart_and_records_leftover(tmp_path):
     ]
     assert len(pairs) == 1
     assert pairs[0]['counterpart_flow_type'] == 'g2b'
+    assert pairs[0]['b2b_path'].endswith('CASE001/b2b.json')
+    assert pairs[0]['counterpart_path'].endswith('CASE001/g2b.json')
 
     leftovers = [
         json.loads(line)
@@ -78,14 +76,9 @@ def test_stage05_cli_selects_longest_counterpart_and_records_leftover(tmp_path):
     assert leftovers == [
         {
             'testcase_key': 'CASE001',
-            'related_pair_id': pairs[0]['pair_id'],
             'trace_file': str(leftover_counterpart_path),
             'best_flow_type': 'b2g',
             'bug_trace_length': 4,
-            'procedure': 'goodB2G',
-            'primary_file': None,
-            'primary_line': None,
-            'dropped_reason': 'not_selected_longest_bug_trace',
         }
     ]
 
@@ -165,13 +158,14 @@ def test_stage05_pair_id_is_stable_across_run_roots(tmp_path):
             .splitlines()
             if line.strip()
         ]
-        return pairs[0]['pair_id'], leftovers[0]['related_pair_id']
+        return pairs[0]['pair_id'], leftovers[0]['trace_file']
 
-    first_pair_id, first_related_pair_id = build_dataset(tmp_path / 'run_a')
-    second_pair_id, second_related_pair_id = build_dataset(tmp_path / 'run_b')
+    first_pair_id, first_leftover = build_dataset(tmp_path / 'run_a')
+    second_pair_id, second_leftover = build_dataset(tmp_path / 'run_b')
 
     assert first_pair_id == second_pair_id
-    assert first_related_pair_id == second_related_pair_id
+    assert first_leftover.endswith('/CASE001/9.json')
+    assert second_leftover.endswith('/CASE001/9.json')
 
 
 def test_stage05_record_sort_key_ignores_run_prefix():
@@ -186,8 +180,6 @@ def test_stage05_record_sort_key_ignores_run_prefix():
         best_flow_type='g2b',
         bug_trace_length=8,
         procedure='goodG2B',
-        primary_file=None,
-        primary_line=None,
         raw={},
     )
     right = module.StrictTraceRecord(
@@ -196,8 +188,6 @@ def test_stage05_record_sort_key_ignores_run_prefix():
         best_flow_type='g2b',
         bug_trace_length=8,
         procedure='goodG2B',
-        primary_file=None,
-        primary_line=None,
         raw={},
     )
 

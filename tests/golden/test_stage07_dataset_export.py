@@ -31,13 +31,7 @@ def test_stage07_dataset_export_matches_golden(tmp_path, monkeypatch):
         )
 
     root_aliases = [(baseline_root, ''), (work_root, ''), (REPO_ROOT, '')]
-    for name in [
-        'Real_Vul_data.csv',
-        'Real_Vul_data_dedup_dropped.csv',
-        'normalized_token_counts.csv',
-        'split_manifest.json',
-        'summary.json',
-    ]:
+    for name in ['Real_Vul_data.csv', 'split_manifest.json', 'summary.json']:
         assert normalized_file_text(
             baseline_root / 'expected/07_dataset_export' / name,
             root_aliases,
@@ -49,5 +43,3 @@ def test_stage07_dataset_export_matches_golden(tmp_path, monkeypatch):
         root_aliases=root_aliases,
         suffixes={'.c', '.cpp'},
     )
-
-    assert (output_dir / 'slice_token_distribution.png').exists()

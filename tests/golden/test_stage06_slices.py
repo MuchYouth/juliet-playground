@@ -32,7 +32,4 @@ def test_stage06_slices_matches_golden(tmp_path):
     assert normalized_file_text(
         baseline_root / 'expected/06_slices/summary.json',
         root_aliases,
-    ) == normalized_file_text(
-        output_dir / 'summary.json',
-        root_aliases,
-    )
+    ) == normalized_file_text(output_dir / 'summary.json', root_aliases)

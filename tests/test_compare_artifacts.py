@@ -18,9 +18,17 @@ def make_dataset_export_dir(root: Path, *, pairs_total: int, processed_suffix: s
     write_json(
         root / 'summary.json',
         {
-            'counts': {'pairs_total': pairs_total, 'pairs_survived': pairs_total},
-            'filtered_pair_reasons': {},
-            'token_stats': {'total': pairs_total * 2},
+            'artifacts': {
+                'csv_path': str(root / 'Real_Vul_data.csv'),
+                'normalized_slices_dir': str(root / 'normalized_slices'),
+                'split_manifest_json': str(root / 'split_manifest.json'),
+                'summary_json': str(root / 'summary.json'),
+            },
+            'stats': {
+                'counts': {'pairs_total': pairs_total, 'pairs_survived': pairs_total},
+                'filtered_pair_reasons': {},
+                'dedup': {'pairs_before': pairs_total, 'pairs_after': pairs_total},
+            },
         },
     )
     write_json(
@@ -41,35 +49,17 @@ def make_dataset_export_dir(root: Path, *, pairs_total: int, processed_suffix: s
             'processed_func',
         ],
         [
-            [
-                '1',
-                '1',
-                '1',
-                '1',
-                'Juliet',
-                'sig/a.json',
-                '',
-                'train_val',
-                f'int a_{processed_suffix};',
-            ],
+            ['1', '1', '1', '1', 'Juliet', 'sig/a.json', '', 'train_val', f'int a_{processed_suffix};'],
             ['2', '2', '0', '', 'Juliet', 'sig/b.json', '', 'test', f'int b_{processed_suffix};'],
         ],
     )
-    write_csv(
-        root / 'normalized_token_counts.csv',
-        [
-            'pair_id',
-            'filename',
-            'extension',
-            'role',
-            'code_token_count',
-            'input_token_count_with_special',
-            'exceeds_510',
-        ],
-        [
-            ['pair-a', '1.c', '.c', 'b2b', '10', '12', 'False'],
-            ['pair-a', '2.c', '.c', 'counterpart', '8', '10', 'False'],
-        ],
+    write_json(
+        root / 'train_patched_counterparts_summary.json',
+        {'artifacts': {}, 'stats': {'counts': {'pairs_total': 1, 'pairs_survived': 1}}},
+    )
+    write_json(
+        root / 'train_patched_counterparts_split_manifest.json',
+        {'counts': {'pairs_total': 1, 'train_val': 1, 'test': 0}},
     )
     write_csv(
         root / 'train_patched_counterparts.csv',
@@ -84,40 +74,7 @@ def make_dataset_export_dir(root: Path, *, pairs_total: int, processed_suffix: s
             'dataset_type',
             'processed_func',
         ],
-        [
-            [
-                '1',
-                '1',
-                '1',
-                '1',
-                'Juliet',
-                'sig/patched.json',
-                '',
-                'train_val',
-                f'int patched_{processed_suffix};',
-            ]
-        ],
-    )
-    write_json(
-        root / 'train_patched_counterparts_summary.json',
-        {'counts': {'pairs_total': 1, 'pairs_survived': 1}},
-    )
-    write_json(
-        root / 'train_patched_counterparts_split_manifest.json',
-        {'counts': {'pairs_total': 1, 'train_val': 1, 'test': 0}},
-    )
-    write_csv(
-        root / 'train_patched_counterparts_token_counts.csv',
-        [
-            'pair_id',
-            'filename',
-            'extension',
-            'role',
-            'code_token_count',
-            'input_token_count_with_special',
-            'exceeds_510',
-        ],
-        [['pair-p', '1.c', '.c', 'b2b', '11', '13', 'False']],
+        [['1', '1', '1', '1', 'Juliet', 'sig/patched.json', '', 'train_val', f'int patched_{processed_suffix};']],
     )
     return root
 
@@ -125,7 +82,7 @@ def make_dataset_export_dir(root: Path, *, pairs_total: int, processed_suffix: s
 def make_pair_trace_dir(root: Path, *, flow: str) -> Path:
     write_json(
         root / 'summary.json',
-        {'paired_testcases': 1, 'selected_counterpart_flow_counts': {flow: 1}},
+        {'artifacts': {'pairs_jsonl': str(root / 'pairs.jsonl')}, 'stats': {'paired_testcases': 1}},
     )
     write_jsonl(
         root / 'pairs.jsonl',
@@ -134,35 +91,22 @@ def make_pair_trace_dir(root: Path, *, flow: str) -> Path:
                 'pair_id': 'pair-1',
                 'testcase_key': 'CASE1',
                 'counterpart_flow_type': flow,
-                'b2b_bug_trace_length': 2,
-                'counterpart_bug_trace_length': 3,
-                'b2b_signature': {'procedure': 'bad'},
-                'counterpart_signature': {'procedure': 'good'},
+                'b2b_path': str(root / 'paired_signatures' / 'CASE1' / 'b2b.json'),
+                'counterpart_path': str(root / 'paired_signatures' / 'CASE1' / f'{flow}.json'),
             }
         ],
     )
     write_jsonl(
         root / 'leftover_counterparts.jsonl',
-        [
-            {
-                'testcase_key': 'CASE1',
-                'best_flow_type': flow,
-                'bug_trace_length': 1,
-                'procedure': 'extra',
-                'primary_file': 'x.c',
-                'primary_line': 10,
-            }
-        ],
+        [{'testcase_key': 'CASE1', 'best_flow_type': flow, 'bug_trace_length': 1, 'trace_file': 'leftover.json'}],
     )
     return root
 
 
 def make_run_dir(root: Path, *, flow: str, pairs_total: int, processed_suffix: str) -> Path:
-    write_json(root / 'run_summary.json', {'status': 'success'})
+    write_json(root / '03_infer_summary.json', {'artifacts': {}, 'stats': {'pairs_total': pairs_total}})
     make_pair_trace_dir(root / '05_pair_trace_ds', flow=flow)
-    make_dataset_export_dir(
-        root / '07_dataset_export', pairs_total=pairs_total, processed_suffix=processed_suffix
-    )
+    make_dataset_export_dir(root / '07_dataset_export', pairs_total=pairs_total, processed_suffix=processed_suffix)
     return root
 
 
@@ -171,9 +115,7 @@ def test_detect_artifact_kind_for_dataset_export_and_run(tmp_path):
         'test_compare_artifacts_detect', REPO_ROOT / 'tools/compare-artifacts.py'
     )
 
-    dataset_dir = make_dataset_export_dir(
-        tmp_path / '07_dataset_export', pairs_total=2, processed_suffix='a'
-    )
+    dataset_dir = make_dataset_export_dir(tmp_path / '07_dataset_export', pairs_total=2, processed_suffix='a')
     run_dir = make_run_dir(tmp_path / 'run-foo', flow='g2b', pairs_total=2, processed_suffix='a')
 
     assert module.detect_artifact_kind(dataset_dir) == 'dataset_export'
@@ -185,9 +127,7 @@ def test_main_reports_dataset_export_differences(tmp_path, capsys):
         'test_compare_artifacts_dataset', REPO_ROOT / 'tools/compare-artifacts.py'
     )
 
-    before = make_dataset_export_dir(
-        tmp_path / 'before_export', pairs_total=2, processed_suffix='a'
-    )
+    before = make_dataset_export_dir(tmp_path / 'before_export', pairs_total=2, processed_suffix='a')
     after = make_dataset_export_dir(tmp_path / 'after_export', pairs_total=3, processed_suffix='b')
 
     assert run_module_main(module, [str(before), str(after), '--limit', '5']) == 0
@@ -221,9 +161,7 @@ def test_main_errors_on_kind_mismatch(tmp_path, capsys):
     )
 
     run_dir = make_run_dir(tmp_path / 'run_before', flow='g2b', pairs_total=2, processed_suffix='a')
-    dataset_dir = make_dataset_export_dir(
-        tmp_path / 'after_export', pairs_total=2, processed_suffix='a'
-    )
+    dataset_dir = make_dataset_export_dir(tmp_path / 'after_export', pairs_total=2, processed_suffix='a')
 
     assert run_module_main(module, [str(run_dir), str(dataset_dir)]) == 1
     err = capsys.readouterr().err

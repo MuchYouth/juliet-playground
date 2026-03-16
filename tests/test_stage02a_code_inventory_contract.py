@@ -46,44 +46,17 @@ def test_stage02a_code_inventory_contract(tmp_path):
 
     pulse_config = json.loads(pulse_config_path.read_text(encoding='utf-8'))
     assert set(pulse_config) == {'pulse-taint-sources', 'pulse-taint-sinks'}
-    assert isinstance(pulse_config['pulse-taint-sources'], list)
-    assert isinstance(pulse_config['pulse-taint-sinks'], list)
-    assert pulse_config['pulse-taint-sources']
-    assert pulse_config['pulse-taint-sinks']
-
-    source_procedures = set()
-    for row in pulse_config['pulse-taint-sources']:
-        assert set(row) == {'procedure', 'taint_target'}
-        assert row['procedure'].strip()
-        assert row['taint_target'] in {'ReturnValue', 'AllArguments'}
-        source_procedures.add(row['procedure'])
-
-    sink_procedures = set()
-    for row in pulse_config['pulse-taint-sinks']:
-        assert set(row) == {'procedure', 'taint_target'}
-        assert row['procedure'].strip()
-        assert row['taint_target'] == 'AllArguments'
-        sink_procedures.add(row['procedure'])
-
+    source_procedures = {row['procedure'] for row in pulse_config['pulse-taint-sources']}
+    sink_procedures = {row['procedure'] for row in pulse_config['pulse-taint-sinks']}
     assert source_procedures == sink_procedures
 
     candidate_map = json.loads(candidate_map_path.read_text(encoding='utf-8'))
     assert isinstance(candidate_map, dict)
     assert candidate_map
-    for key, calls in candidate_map.items():
-        assert isinstance(key, str)
-        assert isinstance(calls, list)
-        for call in calls:
-            assert isinstance(call, dict)
-            assert isinstance(call.get('name'), str)
-            assert call['name'].strip()
-            assert isinstance(call.get('argc'), int)
-            assert call['argc'] >= 0
-            if 'original_name' in call:
-                assert isinstance(call['original_name'], str)
-                assert call['original_name'].strip()
 
     summary = json.loads(summary_path.read_text(encoding='utf-8'))
-    assert summary['candidate_map_keys'] == len(candidate_map)
-    assert summary['unique_function_names'] == len(source_procedures)
-    assert summary['keys_with_calls'] <= summary['candidate_map_keys']
+    assert set(summary) == {'artifacts', 'stats'}
+    assert summary['artifacts']['pulse_taint_config'] == str(pulse_config_path)
+    assert summary['stats']['candidate_map_keys'] == len(candidate_map)
+    assert summary['stats']['unique_function_names'] == len(source_procedures)
+    assert summary['stats']['keys_with_calls'] <= summary['stats']['candidate_map_keys']

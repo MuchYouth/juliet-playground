@@ -32,15 +32,6 @@
   "hash": "bd4f162a97af05023a4b35e71423ee2f",
   "key": "CWE121_Stack_Based_Buffer_Overflow__CWE806_char_declare_ncat_06.c|goodG2B2|TAINT_ERROR",
   "line": 92,
-  "pairing_meta": {
-    "best_flow_type": "g2b2",
-    "bug_trace_length": 2,
-    "pair_id": "1ddbb5add512d983",
-    "role": "counterpart",
-    "selection_reason": "longest_bug_trace",
-    "testcase_key": "CWE121_06-CWE121_Stack_Based_Buffer_Overflow__CWE806_char_declare_ncat",
-    "trace_file": "expected/03_signatures_non_empty/CWE121_06-CWE121_Stack_Based_Buffer_Overflow__CWE806_char_declare_ncat/11.json"
-  },
   "procedure": "goodG2B2",
   "procedure_start_line": 78,
   "qualifier": "Built-in Simple taint kind, matching any Simple source with any Simple sink except if any Simple sanitizer is in the way. `data` is tainted by value passed as argument `#0` to `memset` with kind `Simple` and flows to value passed as argument `#0` to `strlen` with kind `Simple`.",

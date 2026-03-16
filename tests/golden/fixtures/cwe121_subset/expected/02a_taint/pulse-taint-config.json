@@ -1,34 +1,4 @@
 {
-  "pulse-taint-sinks": [
-    {
-      "procedure": "_snprintf",
-      "taint_target": "AllArguments"
-    },
-    {
-      "procedure": "fgets",
-      "taint_target": "AllArguments"
-    },
-    {
-      "procedure": "memset",
-      "taint_target": "AllArguments"
-    },
-    {
-      "procedure": "snprintf",
-      "taint_target": "AllArguments"
-    },
-    {
-      "procedure": "strcat",
-      "taint_target": "AllArguments"
-    },
-    {
-      "procedure": "strlen",
-      "taint_target": "AllArguments"
-    },
-    {
-      "procedure": "strncat",
-      "taint_target": "AllArguments"
-    }
-  ],
   "pulse-taint-sources": [
     {
       "procedure": "_snprintf",
@@ -81,6 +51,36 @@
     {
       "procedure": "strncat",
       "taint_target": "ReturnValue"
+    },
+    {
+      "procedure": "strncat",
+      "taint_target": "AllArguments"
+    }
+  ],
+  "pulse-taint-sinks": [
+    {
+      "procedure": "_snprintf",
+      "taint_target": "AllArguments"
+    },
+    {
+      "procedure": "fgets",
+      "taint_target": "AllArguments"
+    },
+    {
+      "procedure": "memset",
+      "taint_target": "AllArguments"
+    },
+    {
+      "procedure": "snprintf",
+      "taint_target": "AllArguments"
+    },
+    {
+      "procedure": "strcat",
+      "taint_target": "AllArguments"
+    },
+    {
+      "procedure": "strlen",
+      "taint_target": "AllArguments"
     },
     {
       "procedure": "strncat",

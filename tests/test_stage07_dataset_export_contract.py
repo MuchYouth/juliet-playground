@@ -33,21 +33,10 @@ def test_stage07_dataset_export_contract(tmp_path, monkeypatch):
 
     normalized_slices_dir = output_dir / 'normalized_slices'
     real_vul_data_csv = output_dir / 'Real_Vul_data.csv'
-    dedup_dropped_csv = output_dir / 'Real_Vul_data_dedup_dropped.csv'
-    token_counts_csv = output_dir / 'normalized_token_counts.csv'
-    distribution_png = output_dir / 'slice_token_distribution.png'
     split_manifest_path = output_dir / 'split_manifest.json'
     summary_path = output_dir / 'summary.json'
 
-    for path in [
-        normalized_slices_dir,
-        real_vul_data_csv,
-        dedup_dropped_csv,
-        token_counts_csv,
-        distribution_png,
-        split_manifest_path,
-        summary_path,
-    ]:
+    for path in [normalized_slices_dir, real_vul_data_csv, split_manifest_path, summary_path]:
         assert path.exists()
 
     with real_vul_data_csv.open('r', encoding='utf-8', newline='') as f:
@@ -67,9 +56,7 @@ def test_stage07_dataset_export_contract(tmp_path, monkeypatch):
     ]
     assert rows
 
-    normalized_slice_files = sorted(
-        path for path in normalized_slices_dir.iterdir() if path.is_file()
-    )
+    normalized_slice_files = sorted(path for path in normalized_slices_dir.iterdir() if path.is_file())
     assert len(normalized_slice_files) == len(rows)
 
     split_manifest = json.loads(split_manifest_path.read_text(encoding='utf-8'))
@@ -77,6 +64,7 @@ def test_stage07_dataset_export_contract(tmp_path, monkeypatch):
     assert {'train_val', 'test'} <= set(split_manifest['pair_ids'])
 
     summary = json.loads(summary_path.read_text(encoding='utf-8'))
-    assert {'dedup', 'token_stats', 'filtered_pair_reasons', 'counts'} <= set(summary)
-    assert summary['counts']['train_val_pairs'] == len(split_manifest['pair_ids']['train_val'])
-    assert summary['counts']['test_pairs'] == len(split_manifest['pair_ids']['test'])
+    assert set(summary) == {'artifacts', 'stats'}
+    assert {'dedup', 'filtered_pair_reasons', 'counts'} <= set(summary['stats'])
+    assert summary['stats']['counts']['train_val_pairs'] == len(split_manifest['pair_ids']['train_val'])
+    assert summary['stats']['counts']['test_pairs'] == len(split_manifest['pair_ids']['test'])

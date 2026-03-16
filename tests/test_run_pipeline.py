@@ -5,7 +5,7 @@ import pytest
 from tests.helpers import REPO_ROOT, load_module_from_path, run_module_main, write_text
 
 
-def test_full_subcommand_runs_internal_orchestration_in_minimal_mode(monkeypatch, tmp_path):
+def test_full_subcommand_runs_internal_orchestration(monkeypatch, tmp_path):
     module = load_module_from_path('test_run_pipeline_full', REPO_ROOT / 'tools/run_pipeline.py')
 
     manifest = tmp_path / 'manifest.xml'
@@ -20,109 +20,91 @@ def test_full_subcommand_runs_internal_orchestration_in_minimal_mode(monkeypatch
 
     def fake_scan_manifest_comments(**kwargs):
         called.append('01_manifest_comment_scan')
-        print('stage01 ok')
         write_text(kwargs['output_xml'], '<root />\n')
         return {'output_xml': str(kwargs['output_xml'])}
 
     def fake_extract_unique_code_fields(**kwargs):
         called.append('02a_code_field_inventory')
-        print('stage02a ok')
         write_text(kwargs['pulse_taint_config_output'], '{}\n')
-        return {'pulse_taint_config_output': str(kwargs['pulse_taint_config_output'])}
+        return {'artifacts': {'pulse_taint_config': str(kwargs['pulse_taint_config_output'])}, 'stats': {}}
 
     def fake_run_stage02b_flow(**kwargs):
         called.append('02b_testcase_flow_build')
-        assert kwargs['minimal_outputs'] is True
-        print('stage02b ok')
         write_text(kwargs['output_dir'] / 'manifest_with_testcase_flows.xml', '<root />\n')
-        return {
-            'manifest_with_testcase_flows_xml': str(
-                kwargs['output_dir'] / 'manifest_with_testcase_flows.xml'
-            )
-        }
+        write_text(kwargs['output_dir'] / 'summary.json', '{}\n')
+        return {'artifacts': {'summary_json': str(kwargs['output_dir'] / 'summary.json')}, 'stats': {}}
 
     def fake_run_infer_and_signature(**kwargs):
         called.append('03_infer_and_signature')
-        print('stage03 ok')
-        assert kwargs['summary_json'] is None
-        assert kwargs['minimal_outputs'] is True
-        signature_non_empty_dir = (
-            kwargs['signatures_root'] / 'infer-demo' / 'signature-demo' / 'non_empty'
-        )
+        signature_non_empty_dir = kwargs['signatures_root'] / 'infer-demo' / 'signature-demo' / 'non_empty'
         signature_non_empty_dir.mkdir(parents=True, exist_ok=True)
+        write_text(kwargs['summary_json'], '{}\n')
         return {
-            'signature_output_dir': str(signature_non_empty_dir.parent),
-            'signature_non_empty_dir': str(signature_non_empty_dir),
+            'artifacts': {
+                'signature_output_dir': str(signature_non_empty_dir.parent),
+                'signature_non_empty_dir': str(signature_non_empty_dir),
+            },
+            'stats': {'total_cases': 1},
         }
 
     def fake_filter_traces_by_flow(**kwargs):
         called.append('04_trace_flow_filter')
-        print('stage04 ok')
-        assert kwargs['minimal_outputs'] is True
         write_text(kwargs['output_dir'] / 'trace_flow_match_strict.jsonl', '{}\n')
-        return {'trace_jsonl': str(kwargs['output_dir'] / 'trace_flow_match_strict.jsonl')}
+        write_text(kwargs['output_dir'] / 'summary.json', '{}\n')
+        return {'artifacts': {'trace_flow_match_strict_jsonl': str(kwargs['output_dir'] / 'trace_flow_match_strict.jsonl')}, 'stats': {}}
 
     def fake_build_paired_trace_dataset(**kwargs):
         called.append('05_pair_trace_dataset')
-        print('stage05 ok')
-        assert kwargs['minimal_outputs'] is True
         write_text(kwargs['output_dir'] / 'pairs.jsonl', '{}\n')
         write_text(kwargs['output_dir'] / 'leftover_counterparts.jsonl', '{}\n')
+        write_text(kwargs['output_dir'] / 'summary.json', '{}\n')
         (kwargs['output_dir'] / 'paired_signatures').mkdir(parents=True, exist_ok=True)
-        return {'pairs_jsonl': str(kwargs['output_dir'] / 'pairs.jsonl')}
+        return {'artifacts': {'pairs_jsonl': str(kwargs['output_dir'] / 'pairs.jsonl')}, 'stats': {}}
 
     def fake_generate_slices(**kwargs):
         called.append('06_generate_slices')
-        print('stage06 ok')
-        assert kwargs['minimal_outputs'] is True
         (kwargs['output_dir'] / 'slice').mkdir(parents=True, exist_ok=True)
-        return {'slice_dir': str(kwargs['output_dir'] / 'slice')}
+        write_text(kwargs['output_dir'] / 'summary.json', '{}\n')
+        return {'artifacts': {'slice_dir': str(kwargs['output_dir'] / 'slice')}, 'stats': {}}
 
-    def fake_export_primary_dataset(params):
+    def fake_export_primary_dataset(**kwargs):
         called.append('07_dataset_export')
-        print('stage07 ok')
-        assert params.minimal_outputs is True
-        (params.output_dir / 'normalized_slices').mkdir(parents=True, exist_ok=True)
+        (kwargs['output_dir'] / 'normalized_slices').mkdir(parents=True, exist_ok=True)
         for output_path in [
-            params.output_dir / 'Real_Vul_data.csv',
-            params.output_dir / 'split_manifest.json',
+            kwargs['output_dir'] / 'Real_Vul_data.csv',
+            kwargs['output_dir'] / 'split_manifest.json',
+            kwargs['output_dir'] / 'summary.json',
         ]:
             write_text(output_path, 'ok\n')
-        return {
-            'dataset': {
-                'output_dir': str(params.output_dir),
-                'csv_path': str(params.output_dir / 'Real_Vul_data.csv'),
-                'normalized_slices_dir': str(params.output_dir / 'normalized_slices'),
-                'split_manifest_json': str(params.output_dir / 'split_manifest.json'),
-            }
-        }
+        return {'artifacts': {'summary_json': str(kwargs['output_dir'] / 'summary.json')}, 'stats': {}}
 
-    monkeypatch.setattr(
-        module._stage01_manifest, 'scan_manifest_comments', fake_scan_manifest_comments
-    )
-    monkeypatch.setattr(
-        module._stage02a_taint,
-        'extract_unique_code_fields',
-        fake_extract_unique_code_fields,
-    )
+    def fake_export_patched_dataset(**kwargs):
+        called.append('07b_train_patched_counterparts_export')
+        run_dir = kwargs['run_dir']
+        pair_dir = run_dir / '05_pair_trace_ds'
+        slice_dir = run_dir / '06_slices' / 'train_patched_counterparts' / 'slice'
+        dataset_dir = run_dir / '07_dataset_export'
+        (pair_dir / 'train_patched_counterparts_signatures').mkdir(parents=True, exist_ok=True)
+        (slice_dir).mkdir(parents=True, exist_ok=True)
+        (dataset_dir / 'train_patched_counterparts_slices').mkdir(parents=True, exist_ok=True)
+        for output_path in [
+            pair_dir / 'train_patched_counterparts_pairs.jsonl',
+            dataset_dir / 'train_patched_counterparts.csv',
+            dataset_dir / 'train_patched_counterparts_split_manifest.json',
+            dataset_dir / 'train_patched_counterparts_summary.json',
+        ]:
+            write_text(output_path, 'ok\n')
+        return {'artifacts': {'summary_json': str(dataset_dir / 'train_patched_counterparts_summary.json')}, 'stats': {}}
+
+    monkeypatch.setattr(module._stage01_manifest, 'scan_manifest_comments', fake_scan_manifest_comments)
+    monkeypatch.setattr(module._stage02a_taint, 'extract_unique_code_fields', fake_extract_unique_code_fields)
     monkeypatch.setattr(module._stage02b_flow, 'run_stage02b_flow', fake_run_stage02b_flow)
-    monkeypatch.setattr(
-        module._stage03_infer,
-        'run_infer_and_signature',
-        fake_run_infer_and_signature,
-    )
-    monkeypatch.setattr(
-        module._stage04_trace_flow,
-        'filter_traces_by_flow',
-        fake_filter_traces_by_flow,
-    )
-    monkeypatch.setattr(
-        module._stage05_pair_trace,
-        'build_paired_trace_dataset',
-        fake_build_paired_trace_dataset,
-    )
+    monkeypatch.setattr(module._stage03_infer, 'run_infer_and_signature', fake_run_infer_and_signature)
+    monkeypatch.setattr(module._stage04_trace_flow, 'filter_traces_by_flow', fake_filter_traces_by_flow)
+    monkeypatch.setattr(module._stage05_pair_trace, 'build_paired_trace_dataset', fake_build_paired_trace_dataset)
     monkeypatch.setattr(module._stage06_slices, 'generate_slices', fake_generate_slices)
     monkeypatch.setattr(module, 'export_primary_dataset', fake_export_primary_dataset)
+    monkeypatch.setattr(module, 'export_patched_dataset', fake_export_patched_dataset)
 
     result = run_module_main(
         module,
@@ -152,6 +134,7 @@ def test_full_subcommand_runs_internal_orchestration_in_minimal_mode(monkeypatch
         '05_pair_trace_dataset',
         '06_generate_slices',
         '07_dataset_export',
+        '07b_train_patched_counterparts_export',
     ]
 
     run_dir = pipeline_root / 'run-test'
@@ -159,10 +142,10 @@ def test_full_subcommand_runs_internal_orchestration_in_minimal_mode(monkeypatch
     assert not (run_dir / 'logs').exists()
     assert (run_dir / '05_pair_trace_ds' / 'leftover_counterparts.jsonl').exists()
     assert (run_dir / '07_dataset_export' / 'split_manifest.json').exists()
-    assert not (run_dir / '07_dataset_export' / 'summary.json').exists()
-    assert not (run_dir / '07_dataset_export' / 'train_patched_counterparts_summary.json').exists()
-    assert not (run_dir / '04_trace_flow' / 'summary.json').exists()
-    assert not (run_dir / '06_slices' / 'summary.json').exists()
+    assert (run_dir / '07_dataset_export' / 'summary.json').exists()
+    assert (run_dir / '07_dataset_export' / 'train_patched_counterparts_summary.json').exists()
+    assert (run_dir / '04_trace_flow' / 'summary.json').exists()
+    assert (run_dir / '06_slices' / 'summary.json').exists()
 
 
 def test_full_subcommand_returns_failure_on_step_error(monkeypatch, tmp_path):
@@ -179,25 +162,13 @@ def test_full_subcommand_returns_failure_on_step_error(monkeypatch, tmp_path):
     write_text(manifest, '<manifest />\n')
     write_text(committed_taint_config, '{}\n')
 
-    monkeypatch.setattr(
-        module,
-        'run_step01_manifest_comment_scan',
-        lambda **kwargs: {'step': '01'},
-    )
-    monkeypatch.setattr(
-        module,
-        'run_step02a_code_field_inventory',
-        lambda **kwargs: {'step': '02a'},
-    )
-    monkeypatch.setattr(
-        module,
-        'run_step02b_flow_build',
-        lambda **kwargs: {'step': '02b'},
-    )
+    monkeypatch.setattr(module, 'run_step01_manifest_comment_scan', lambda **kwargs: {'step': '01'})
+    monkeypatch.setattr(module, 'run_step02a_code_field_inventory', lambda **kwargs: {'step': '02a'})
+    monkeypatch.setattr(module, 'run_step02b_flow_build', lambda **kwargs: {'step': '02b'})
     monkeypatch.setattr(
         module,
         'run_step03_infer_and_signature',
-        lambda **kwargs: ({'step': '03'}, {'step': '03'}, tmp_path / 'non-empty'),
+        lambda **kwargs: {'artifacts': {'signature_non_empty_dir': str(tmp_path / 'non-empty')}, 'stats': {}},
     )
 
     def fail_step04(**kwargs):

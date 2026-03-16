@@ -41,12 +41,8 @@ def _make_pair(
         'pair_id': pair_id,
         'testcase_key': testcase_key,
         'counterpart_flow_type': counterpart_flow_type,
-        'b2b_signature': {'primary_file': f'{testcase_key}.c'},
-        'counterpart_signature': {'primary_file': f'{testcase_key}.c'},
-        'output_files': {
-            'b2b': str(b2b_path),
-            counterpart_flow_type: str(counterpart_path),
-        },
+        'b2b_path': str(b2b_path),
+        'counterpart_path': str(counterpart_path),
     }
 
 
@@ -118,7 +114,7 @@ def test_load_pairs_jsonl_validates_required_keys(tmp_path):
         module.load_pairs_jsonl(pairs_jsonl)
 
 
-def test_export_dataset_from_pipeline_writes_split_and_dedup_outputs(tmp_path, monkeypatch):
+def test_export_dataset_from_pipeline_writes_split_outputs(tmp_path, monkeypatch):
     module = load_module_from_path(
         'test_step07_behavior_happy_path',
         REPO_ROOT / 'tools/stage/stage07_dataset_export.py',
@@ -128,52 +124,17 @@ def test_export_dataset_from_pipeline_writes_split_and_dedup_outputs(tmp_path, m
     write_text(source_path, 'int helper(void) { return 0; }\n')
 
     root = tmp_path / 'inputs'
-    pair_a = _make_pair(
-        root,
-        'CASE_A',
-        'pair-a',
-        'g2b',
-        'int bad_a = 1;\n',
-        'int good_a = 0;\n',
-    )
-    pair_b = _make_pair(
-        root,
-        'CASE_B',
-        'pair-b',
-        'g2b1',
-        'int bad_b = 2;\n',
-        'int good_b = 3;\n',
-    )
-    pair_c = _make_pair(
-        root,
-        'CASE_C',
-        'pair-c',
-        'g2b2',
-        'int bad_a = 1;\n',
-        'int good_a = 0;\n',
-    )
-    pair_d = _make_pair(
-        root,
-        'CASE_D',
-        'pair-d',
-        'g2b',
-        'int bad_d = 4;\n',
-        'int good_d = 5;\n',
-    )
-    # Trigger missing_slice_file for pair_d counterpart.
+    pair_a = _make_pair(root, 'CASE_A', 'pair-a', 'g2b', 'int bad_a = 1;\n', 'int good_a = 0;\n')
+    pair_b = _make_pair(root, 'CASE_B', 'pair-b', 'g2b1', 'int bad_b = 2;\n', 'int good_b = 3;\n')
+    pair_c = _make_pair(root, 'CASE_C', 'pair-c', 'g2b2', 'int bad_a = 1;\n', 'int good_a = 0;\n')
+    pair_d = _make_pair(root, 'CASE_D', 'pair-d', 'g2b', 'int bad_d = 4;\n', 'int good_d = 5;\n')
     (root / 'slice' / 'slice_CASE_D_g2b.c').unlink()
 
     pairs_jsonl = tmp_path / 'pairs.jsonl'
     write_jsonl(pairs_jsonl, [pair_a, pair_b, pair_c, pair_d])
 
-    monkeypatch.setattr(
-        module, 'build_source_file_candidates', lambda *_args, **_kwargs: [source_path]
-    )
-    monkeypatch.setattr(
-        module,
-        'collect_defined_function_names',
-        lambda *_args, **_kwargs: (set(), None),
-    )
+    monkeypatch.setattr(module, 'build_source_file_candidates', lambda *_args, **_kwargs: [source_path])
+    monkeypatch.setattr(module, 'collect_defined_function_names', lambda *_args, **_kwargs: (set(), None))
 
     output_dir = tmp_path / 'out'
     with deterministic_tokenizer_context():
@@ -187,15 +148,16 @@ def test_export_dataset_from_pipeline_writes_split_and_dedup_outputs(tmp_path, m
             dedup_mode='row',
         )
 
-    assert Path(result['dataset']['summary_json']).exists()
+    assert Path(result['artifacts']['summary_json']).exists()
 
     summary = json.loads((output_dir / 'summary.json').read_text(encoding='utf-8'))
-    assert summary['counts']['pairs_total'] == 4
-    assert summary['counts']['pairs_survived'] == 2
-    assert summary['counts']['pairs_filtered_out'] == 2
-    assert summary['counts']['train_val_pairs'] == 1
-    assert summary['counts']['test_pairs'] == 1
-    assert summary['filtered_pair_reasons'] == {
+    counts = summary['stats']['counts']
+    assert counts['pairs_total'] == 4
+    assert counts['pairs_survived'] == 2
+    assert counts['pairs_filtered_out'] == 2
+    assert counts['train_val_pairs'] == 1
+    assert counts['test_pairs'] == 1
+    assert summary['stats']['filtered_pair_reasons'] == {
         'missing_slice_file': 1,
         'dedup_duplicate_normalized_slice': 1,
     }
@@ -206,10 +168,6 @@ def test_export_dataset_from_pipeline_writes_split_and_dedup_outputs(tmp_path, m
     assert split_manifest['counts']['test'] == 1
     assert len(split_manifest['pair_ids']['train_val']) == 1
     assert len(split_manifest['pair_ids']['test']) == 1
-
-    with (output_dir / 'Real_Vul_data_dedup_dropped.csv').open(newline='', encoding='utf-8') as f:
-        rows = list(csv.reader(f))
-    assert len(rows) == 3  # header + 2 dropped rows from duplicate pair
 
     normalized_files = sorted((output_dir / 'normalized_slices').iterdir())
     assert len(normalized_files) == 4
@@ -222,27 +180,14 @@ def test_export_dataset_from_pipeline_filters_over_limit_pairs(tmp_path, monkeyp
     )
 
     root = tmp_path / 'inputs'
-    pair = _make_pair(
-        root,
-        'CASE_LONG',
-        'pair-long',
-        'g2b',
-        'OVER_LIMIT bad\n',
-        'OVER_LIMIT good\n',
-    )
+    pair = _make_pair(root, 'CASE_LONG', 'pair-long', 'g2b', 'OVER_LIMIT bad\n', 'OVER_LIMIT good\n')
     pairs_jsonl = tmp_path / 'pairs.jsonl'
     write_jsonl(pairs_jsonl, [pair])
 
     source_path = tmp_path / 'sources' / 'shared.c'
     write_text(source_path, 'int helper(void) { return 0; }\n')
-    monkeypatch.setattr(
-        module, 'build_source_file_candidates', lambda *_args, **_kwargs: [source_path]
-    )
-    monkeypatch.setattr(
-        module,
-        'collect_defined_function_names',
-        lambda *_args, **_kwargs: (set(), None),
-    )
+    monkeypatch.setattr(module, 'build_source_file_candidates', lambda *_args, **_kwargs: [source_path])
+    monkeypatch.setattr(module, 'collect_defined_function_names', lambda *_args, **_kwargs: (set(), None))
 
     from shared import slice_tokenizer
 
@@ -253,11 +198,6 @@ def test_export_dataset_from_pipeline_filters_over_limit_pairs(tmp_path, monkeyp
             return code.split()
 
     monkeypatch.setattr(slice_tokenizer, 'load_tokenizer', lambda _model_name: OverLimitTokenizer())
-    monkeypatch.setattr(
-        slice_tokenizer,
-        'plot_distribution',
-        lambda _rows, output_plot: Path(output_plot).write_bytes(b'STUB_PNG\n'),
-    )
 
     output_dir = tmp_path / 'out'
     module.export_dataset_from_pipeline(
@@ -271,9 +211,9 @@ def test_export_dataset_from_pipeline_filters_over_limit_pairs(tmp_path, monkeyp
     )
 
     summary = json.loads((output_dir / 'summary.json').read_text(encoding='utf-8'))
-    assert summary['filtered_pair_reasons'] == {'over_limit': 1}
-    assert summary['counts']['pairs_survived'] == 0
-    assert summary['counts']['rows_written'] == 0
+    assert summary['stats']['filtered_pair_reasons'] == {'over_limit': 1}
+    assert summary['stats']['counts']['pairs_survived'] == 0
+    assert summary['stats']['counts']['rows_written'] == 0
 
     with (output_dir / 'Real_Vul_data.csv').open(newline='', encoding='utf-8') as f:
         rows = list(csv.reader(f))

@@ -50,7 +50,7 @@ def test_process_signature_db_uses_longest_subtrace_and_dedupes_locations(tmp_pa
     assert generated_files[0].read_text(encoding='utf-8') == 'line 2\nline 3\n'
 
 
-def test_generate_slices_adds_dataset_basename_without_overriding_core_keys(tmp_path):
+def test_generate_slices_returns_compact_artifacts_and_stats(tmp_path):
     module = load_module_from_path(
         'test_stage06_slices_metadata',
         REPO_ROOT / 'tools/stage/stage06_slices.py',
@@ -72,13 +72,13 @@ def test_generate_slices_adds_dataset_basename_without_overriding_core_keys(tmp_
     )
 
     output_dir = tmp_path / 'out'
-    summary = module.generate_slices(
+    result = module.generate_slices(
         signature_db_dir=tmp_path / 'signatures',
         output_dir=output_dir,
         run_dir=tmp_path / 'run',
         dataset_basename='train_patched_counterparts',
     )
 
-    assert summary['dataset_basename'] == 'train_patched_counterparts'
-    assert summary['slice_dir'] == str(output_dir / 'slice')
-    assert summary['total_slices'] == 1
+    assert result['artifacts']['slice_dir'] == str(output_dir / 'slice')
+    assert result['stats']['total_slices'] == 1
+    assert result['stats']['generated'] == 1
