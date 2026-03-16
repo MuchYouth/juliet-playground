@@ -6,6 +6,7 @@ import json
 from pathlib import Path
 from typing import Any
 
+from shared import step07_dedup as _step07_dedup
 from stage import pipeline as _pipeline
 from stage import rerun_step07 as _rerun_step07
 from stage import stage01_manifest as _stage01_manifest
@@ -17,6 +18,13 @@ from stage import stage05_pair_trace as _stage05_pair_trace
 from stage import stage06_slices as _stage06_slices
 from stage import stage07_dataset_export as _stage07_dataset_export
 from stage import stage07b_patched_export as _stage07b_patched_export
+
+PrimaryDatasetExportParams = _stage07_dataset_export.PrimaryDatasetExportParams
+PrimaryDatasetExportResult = _stage07_dataset_export.PrimaryDatasetExportResult
+compute_pair_split = _stage07_dataset_export.compute_pair_split
+dedupe_pairs_by_normalized_rows = _step07_dedup.dedupe_pairs_by_normalized_rows
+export_dataset_from_pipeline = _stage07_dataset_export.export_dataset_from_pipeline
+export_primary_dataset = _stage07_dataset_export.export_primary_dataset
 
 
 def _print_result(result: Any) -> int:

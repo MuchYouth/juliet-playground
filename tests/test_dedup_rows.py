@@ -6,7 +6,7 @@ from collections import Counter
 def test_dedupe_pairs_by_normalized_rows_drops_duplicate_pair_and_keeps_audit(
     load_tools_module,
 ):
-    module = load_tools_module('test_run_epic001_pipeline_dedup_module', 'run-epic001-pipeline.py')
+    module = load_tools_module('test_run_pipeline_dedup_module', 'run_pipeline.py')
 
     surviving_pairs = {
         'pair-keep': [

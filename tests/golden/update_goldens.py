@@ -333,7 +333,7 @@ def run_stage06(temp_root: Path) -> None:
 def run_stage07(temp_root: Path) -> None:
     pipeline_module = load_module_from_path(
         'golden_stage07_pipeline',
-        REPO_ROOT / 'tools/run-epic001-pipeline.py',
+        REPO_ROOT / 'tools/run_pipeline.py',
     )
     output_dir = temp_root / 'expected/07_dataset_export'
     ensure_clean_dir(output_dir)

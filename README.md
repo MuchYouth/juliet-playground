@@ -73,30 +73,32 @@ source .venv/bin/activate && ruff format .
 커밋할 때는 `pre-commit` hook이 자동으로 실행됩니다.
 개발 확인이 끝나면 아래의 Infer / 파이프라인 실행 명령을 사용하면 됩니다.
 
-### 2) 단일 Infer 실행
+### 2) 단일 Infer + Signature 실행
 
 ```bash
-source .venv/bin/activate && python tools/run-infer-all-juliet.py 78
+source .venv/bin/activate && python tools/run_pipeline.py stage03 78
 ```
 
 ### 3) 통합 파이프라인 실행
 
 ```bash
-source .venv/bin/activate && python tools/run-epic001-pipeline.py 78
+source .venv/bin/activate && python tools/run_pipeline.py full 78
 ```
 
 전체 CWE에 대해 실행하려면:
 
 ```bash
-source .venv/bin/activate && python tools/run-epic001-pipeline.py --all
+source .venv/bin/activate && python tools/run_pipeline.py full --all
 ```
 
 기본 run-id 규칙은 `run-YYYY.MM.DD-HH:MM:SS`이며,
 실제 경로는 `artifacts/pipeline-runs/run-.../` 입니다.
 
+기존 `tools/run-epic001-pipeline.py`는 동일한 full 실행을 감싼 호환 wrapper입니다.
+
 ## 파이프라인 개요
 
-`tools/run-epic001-pipeline.py`는 아래 단계를 순서대로 실행합니다.
+`tools/run_pipeline.py full`은 아래 단계를 순서대로 실행합니다.
 
 1. `01_manifest`: manifest에 Juliet 주석 매핑
 2. `02a_taint`: code inventory / 함수 후보 추출 / pulse taint config 생성
@@ -141,23 +143,23 @@ artifacts/
 ## 대표 명령어
 
 ```bash
-# Infer만 빠르게 실행
-python tools/run-infer-all-juliet.py 78
+# Infer + signature만 빠르게 실행
+python tools/run_pipeline.py stage03 78
 
 # 특정 파일(해당 flow variant 그룹)만 실행
-python tools/run-infer-all-juliet.py --files juliet-test-suite-v1.3/C/testcases/CWE78_OS_Command_Injection/s01/CWE78_OS_Command_Injection__char_console_execlp_52a.c
+python tools/run_pipeline.py stage03 --files juliet-test-suite-v1.3/C/testcases/CWE78_OS_Command_Injection/s01/CWE78_OS_Command_Injection__char_console_execlp_52a.c
 
 # 기존 infer 결과에서 signature만 생성
 python tools/generate-signature.py --input-dir artifacts/infer-results/infer-2026.03.08-18:04:18
 
 # 통합 파이프라인
-python tools/run-epic001-pipeline.py 78 89
+python tools/run_pipeline.py full 78 89
 
 # strict trace 결과에서 paired trace dataset만 생성
-python tools/build-paired-trace-signatures.py
+python tools/run_pipeline.py stage05 --trace-jsonl artifacts/pipeline-runs/run-2026.03.09-22:18:32/04_trace_flow/trace_flow_match_strict.jsonl --output-dir /tmp/paired-trace-ds
 
 # 기존 run의 Step 07 + 07b 재생성
-python tools/rerun-step07.py --run-dir artifacts/pipeline-runs/run-2026.03.10-00:49:21
+python tools/run_pipeline.py rerun-step07 --run-dir artifacts/pipeline-runs/run-2026.03.10-00:49:21
 ```
 
 추가 명령 예시와 재실행 패턴은 [`docs/rerun.md`](docs/rerun.md)에 정리되어 있습니다.
@@ -169,7 +171,7 @@ python tools/rerun-step07.py --run-dir artifacts/pipeline-runs/run-2026.03.10-00
 - `--files` 사용 시 `cwes` / `--all`은 무시됩니다.
 - `--all` 사용 시 positional `cwes` 인자는 무시됩니다.
 - `.cpp`는 `clang++`, `.c`는 `clang`을 사용합니다.
-- `run-infer-all-juliet.py --global-result`를 쓰면 infer 결과 root가
+- `run_pipeline.py stage03 --global-result`를 쓰면 infer 결과 root가
   로컬 `artifacts/infer-results/` 대신 `/data/pattern/result/infer-results/`로 바뀝니다.
 - CodeBERT tokenizer 캐시, `--overwrite`, `--old-prefix/--new-prefix`,
   `rerun-step07.py`의 suffix 규칙, 재현성 옵션은 [`docs/rerun.md`](docs/rerun.md)를 참고하세요.

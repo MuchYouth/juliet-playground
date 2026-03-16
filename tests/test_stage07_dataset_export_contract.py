@@ -15,7 +15,7 @@ def test_stage07_dataset_export_contract(tmp_path, monkeypatch):
     baseline_root, work_root = prepare_workspace(tmp_path)
     pipeline_module = load_module_from_path(
         'test_stage07_dataset_export_contract',
-        REPO_ROOT / 'tools/run-epic001-pipeline.py',
+        REPO_ROOT / 'tools/run_pipeline.py',
     )
 
     monkeypatch.chdir(baseline_root)

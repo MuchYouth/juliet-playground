@@ -38,7 +38,7 @@ artifacts/
 
 ## 파이프라인 run 산출물
 
-`python tools/run-epic001-pipeline.py ...`는 `artifacts/pipeline-runs/run-.../` 아래에 아래 구조를 만듭니다.
+`python tools/run_pipeline.py full ...`는 `artifacts/pipeline-runs/run-.../` 아래에 아래 구조를 만듭니다.
 
 ```text
 artifacts/pipeline-runs/run-YYYY.MM.DD-HH:MM:SS/

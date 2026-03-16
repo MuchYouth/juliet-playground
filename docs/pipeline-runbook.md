@@ -14,6 +14,11 @@
 
 ## 주요 스크립트와 역할
 
+- `tools/run_pipeline.py`
+  - 전체 파이프라인, stage별 실행, `rerun-step07`를 한 곳에서 실행하는 기본 entrypoint
+  - 대표 subcommand: `full`, `stage03`, `stage05`, `stage06`, `stage07`, `stage07b`, `rerun-step07`
+- `tools/run-epic001-pipeline.py`
+  - 기존 full pipeline 호출을 위한 얇은 호환 wrapper
 - `tools/run-infer-all-juliet.py`
   - CWE 단위 또는 파일 단위로 Infer 실행
   - `analysis/result.csv`, `analysis/no_issue_files.txt` 생성
@@ -21,9 +26,6 @@
 - `tools/generate-signature.py`
   - `infer-out/report.json`에서 `bug_type == TAINT_ERROR`이고 `bug_trace`가 non-empty인 이슈만 JSON으로 저장
   - `non_empty/analysis/signature_counts.csv` 생성
-- `tools/run-epic001-pipeline.py`
-  - Step 01~07b를 한 번에 실행
-  - `logs/`와 `run_summary.json`까지 포함해 run 단위 산출물을 정리
 - `tools/build-paired-trace-signatures.py`
   - strict trace 중 testcase별 `b2b`와 counterpart를 1:1 선택
   - 후보가 여러 개면 `bug_trace_length`가 가장 긴 trace를 선택하고 나머지는 `leftover_counterparts.jsonl`로 보관
@@ -48,7 +50,7 @@
 - 대표 명령 모음:
   [`rerun.md`](rerun.md) → `자주 쓰는 명령`
 - Step 07 / 07b 재실행:
-  [`rerun.md`](rerun.md) → ``rerun-step07.py` 동작 정리`
+  [`rerun.md`](rerun.md) → ``run_pipeline.py rerun-step07` 동작 정리`
 - tokenizer / overwrite / path rewrite:
   [`rerun.md`](rerun.md) → `운영 메모`
 
