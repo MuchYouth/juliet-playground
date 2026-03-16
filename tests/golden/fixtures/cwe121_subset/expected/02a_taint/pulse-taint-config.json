@@ -5,10 +5,6 @@
       "taint_target": "AllArguments"
     },
     {
-      "procedure": "_snwprintf",
-      "taint_target": "AllArguments"
-    },
-    {
       "procedure": "fgets",
       "taint_target": "AllArguments"
     },
@@ -30,10 +26,6 @@
     },
     {
       "procedure": "strncat",
-      "taint_target": "AllArguments"
-    },
-    {
-      "procedure": "swprintf",
       "taint_target": "AllArguments"
     }
   ],
@@ -47,14 +39,6 @@
       "taint_target": "AllArguments"
     },
     {
-      "procedure": "_snwprintf",
-      "taint_target": "ReturnValue"
-    },
-    {
-      "procedure": "_snwprintf",
-      "taint_target": "AllArguments"
-    },
-    {
       "procedure": "fgets",
       "taint_target": "ReturnValue"
     },
@@ -100,14 +84,6 @@
     },
     {
       "procedure": "strncat",
-      "taint_target": "AllArguments"
-    },
-    {
-      "procedure": "swprintf",
-      "taint_target": "ReturnValue"
-    },
-    {
-      "procedure": "swprintf",
       "taint_target": "AllArguments"
     }
   ]

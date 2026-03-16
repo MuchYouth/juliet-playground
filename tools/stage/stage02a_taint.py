@@ -10,6 +10,8 @@ from collections import Counter
 from dataclasses import dataclass
 from pathlib import Path
 
+from shared.juliet_manifest import build_manifest_source_index
+
 TARGET_COMMENT_TAGS = ('comment_flaw', 'comment_fix')
 TARGET_ALL_TAGS = (*TARGET_COMMENT_TAGS, 'flaw')
 SOURCE_EXTS = {'.c', '.cpp', '.h'}
@@ -68,14 +70,6 @@ def load_parsers() -> dict[str, object]:
             parser.language = lang
         parsers[language_name] = parser
     return parsers
-
-
-def build_source_index(source_root: Path) -> dict[str, Path]:
-    index: dict[str, Path] = {}
-    for p in source_root.rglob('*'):
-        if p.is_file() and p.suffix.lower() in SOURCE_EXTS and p.name not in index:
-            index[p.name] = p
-    return index
 
 
 def _node_first_line_text(node, source_bytes: bytes) -> str:
@@ -177,11 +171,11 @@ def _derive_flaw_key(ctx: FileContext, line_no: int) -> str:
     return line_text if line_text else 'WARNING_FLAW_CODE_NOT_FOUND'
 
 
-def _collect_macro_definitions(source_root: Path) -> dict[str, list[MacroDefinition]]:
+def _collect_macro_definitions(source_paths: list[Path]) -> dict[str, list[MacroDefinition]]:
     macro_defs: dict[str, list[MacroDefinition]] = {}
     order = 0
-    for p in source_root.rglob('*'):
-        if not p.is_file() or p.suffix.lower() not in SOURCE_EXTS:
+    for p in source_paths:
+        if p.suffix.lower() not in SOURCE_EXTS:
             continue
         try:
             lines = p.read_text(encoding='utf-8', errors='ignore').splitlines()
@@ -461,7 +455,11 @@ def extract_unique_code_fields(
         raise FileNotFoundError(f'Source root not found: {source_root}')
 
     parsers = load_parsers()
-    source_index = build_source_index(source_root)
+    source_index = build_manifest_source_index(
+        manifest_xml=input_xml,
+        source_root=source_root,
+        suffixes=SOURCE_EXTS,
+    )
     root = ET.parse(input_xml).getroot()
 
     all_comment_codes: list[str] = []
@@ -515,7 +513,7 @@ def extract_unique_code_fields(
         for call in calls
         if str(call.get('name', '')).strip()
     }
-    macro_defs = _collect_macro_definitions(source_root)
+    macro_defs = _collect_macro_definitions(sorted(source_index.values(), key=str))
     resolution_map = _build_resolution_map(raw_function_names, macro_defs)
     candidate_map = _apply_resolution_to_candidate_map(candidate_map_raw, resolution_map)
 

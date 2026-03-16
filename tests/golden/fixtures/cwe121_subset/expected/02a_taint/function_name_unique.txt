@@ -1,9 +1,7 @@
 _snprintf
-_snwprintf
 fgets
 memset
 snprintf
 strcat
 strlen
 strncat
-swprintf

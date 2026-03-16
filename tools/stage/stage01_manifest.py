@@ -7,6 +7,8 @@ import re
 import xml.etree.ElementTree as ET
 from pathlib import Path
 
+from shared.juliet_manifest import build_manifest_source_index
+
 
 def new_stats() -> dict:
     return {
@@ -171,10 +173,11 @@ def scan_manifest_comments(
     if not source_root.exists():
         raise FileNotFoundError(f'Source root not found: {source_root}')
 
-    source_index: dict[str, Path] = {}
-    for p in source_root.rglob('*'):
-        if p.is_file() and p.suffix.lower() in SOURCE_EXTS and p.name not in source_index:
-            source_index[p.name] = p
+    source_index = build_manifest_source_index(
+        manifest_xml=manifest,
+        source_root=source_root,
+        suffixes=SOURCE_EXTS,
+    )
 
     parsers = load_parsers()
     tree = ET.parse(manifest)

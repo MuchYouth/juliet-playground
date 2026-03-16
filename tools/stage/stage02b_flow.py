@@ -12,6 +12,8 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
+from shared.juliet_manifest import build_manifest_source_index
+
 TARGET_TAGS = {'comment_flaw', 'comment_fix'}
 C_IDENTIFIER_RE = re.compile(r'^[A-Za-z_][A-Za-z0-9_]*$')
 
@@ -250,14 +252,6 @@ def classify_operation_role_from_name(simple_name: str, original_name: str) -> t
 
 def _agg(items: list[FunctionRow]) -> dict[str, int]:
     return {'unique_count': len(items), 'weighted_count': sum(x.count for x in items)}
-
-
-def build_source_index(source_root: Path) -> dict[str, Path]:
-    idx: dict[str, Path] = {}
-    for p in source_root.rglob('*'):
-        if p.is_file() and p.suffix.lower() in {'.c', '.cpp', '.h'} and p.name not in idx:
-            idx[p.name] = p
-    return idx
 
 
 def load_function_files(manifest_xml: Path) -> dict[str, set[str]]:
@@ -588,7 +582,11 @@ def categorize_function_names(
         )
     )
 
-    source_index = build_source_index(source_root)
+    source_index = build_manifest_source_index(
+        manifest_xml=manifest_xml,
+        source_root=source_root,
+        suffixes={'.c', '.cpp', '.h'},
+    )
     function_files = load_function_files(manifest_xml)
     file_cache: dict[Path, str] = {}
     raw_rows = load_input_rows(input_csv)

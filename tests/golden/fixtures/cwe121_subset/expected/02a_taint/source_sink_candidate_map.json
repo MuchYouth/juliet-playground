@@ -9,17 +9,7 @@
     },
     {
       "argc": 4,
-      "name": "_snwprintf",
-      "original_name": "SNPRINTF"
-    },
-    {
-      "argc": 4,
       "name": "snprintf",
-      "original_name": "SNPRINTF"
-    },
-    {
-      "argc": 4,
-      "name": "swprintf",
       "original_name": "SNPRINTF"
     },
     {
