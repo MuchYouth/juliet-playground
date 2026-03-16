@@ -25,30 +25,28 @@ def test_stage03_infer_and_signature_contract(load_tools_module, monkeypatch, tm
             'time': 1.25,
         }
 
-    class DummySignatureModule:
-        @staticmethod
-        def generate_signatures(*, input_dir: Path, output_root: Path, infer_run_name: str):
-            output_dir = output_root / infer_run_name / 'signature-contract'
-            testcase_dir = output_dir / 'non_empty' / 'CASE_DEMO'
-            testcase_dir.mkdir(parents=True, exist_ok=True)
-            (testcase_dir / '1.json').write_text(
-                json.dumps(
-                    {
-                        'file': 'demo.c',
-                        'line': 10,
-                        'procedure': 'bad',
-                        'bug_trace': [{'filename': 'demo.c', 'line_number': 10}],
-                    },
-                    ensure_ascii=False,
-                    indent=2,
-                )
-                + '\n',
-                encoding='utf-8',
+    def fake_generate_signatures(*, input_dir: Path, output_root: Path, infer_run_name: str):
+        output_dir = output_root / infer_run_name / 'signature-contract'
+        testcase_dir = output_dir / 'non_empty' / 'CASE_DEMO'
+        testcase_dir.mkdir(parents=True, exist_ok=True)
+        (testcase_dir / '1.json').write_text(
+            json.dumps(
+                {
+                    'file': 'demo.c',
+                    'line': 10,
+                    'procedure': 'bad',
+                    'bug_trace': [{'filename': 'demo.c', 'line_number': 10}],
+                },
+                ensure_ascii=False,
+                indent=2,
             )
-            return output_dir
+            + '\n',
+            encoding='utf-8',
+        )
+        return output_dir
 
     monkeypatch.setattr(module._infer_runner, 'run_infer_for_files', fake_run_infer_for_files)
-    monkeypatch.setattr(module._infer_runner, 'load_signature_module', lambda: DummySignatureModule)
+    monkeypatch.setattr(module._infer_runner, 'generate_signatures', fake_generate_signatures)
 
     result = module.main(
         cwes=None,

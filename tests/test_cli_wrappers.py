@@ -69,6 +69,14 @@ def test_export_train_wrapper_delegates(load_tools_module, monkeypatch):
     assert module.main() == 11
 
 
+def test_generate_signature_wrapper_delegates(load_tools_module, monkeypatch):
+    module = load_tools_module('test_wrapper_generate_signature', 'generate-signature.py')
+
+    monkeypatch.setattr(module._signature_stage, 'main', lambda **_kwargs: 13)
+
+    assert module.main() == 13
+
+
 def test_rerun_step07_wrapper_delegates(load_tools_module, monkeypatch):
     module = load_tools_module('test_wrapper_rerun_step07', 'rerun-step07.py')
 

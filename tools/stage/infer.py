@@ -1,7 +1,6 @@
 import concurrent.futures
 import csv
 import datetime
-import importlib.util
 import json
 import os
 import re
@@ -21,6 +20,8 @@ from shared.paths import (
     PULSE_TAINT_CONFIG,
     RESULT_DIR,
 )
+
+from stage.signature import generate_signatures
 
 TOTAL_CORES = os.cpu_count() or 4
 # Conservative memory-aware parallelization to prevent OOM
@@ -317,17 +318,6 @@ def generate_no_issue_files(result_map: Dict[object, Dict[str, object]], result_
     return Path(txt_path)
 
 
-def load_signature_module():
-    module_path = os.path.join(PROJECT_HOME, 'tools', 'generate-signature.py')
-    spec = importlib.util.spec_from_file_location('generate_signature_module', module_path)
-    if spec is None or spec.loader is None:
-        raise RuntimeError(f'Failed to load signature module: {module_path}')
-
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module
-
-
 def _build_summary_by_target(
     result_map: Dict[object, Dict[str, object]],
 ) -> Dict[str, Dict[str, object]]:
@@ -412,8 +402,7 @@ def main(
     result_csv = generate_result_csv(result_map, str(infer_run_dir))
     no_issue_txt = generate_no_issue_files(result_map, str(infer_run_dir))
 
-    signature_module = load_signature_module()
-    signature_output_dir = signature_module.generate_signatures(
+    signature_output_dir = generate_signatures(
         input_dir=Path(infer_run_dir),
         output_root=Path(signatures_root),
         infer_run_name=Path(infer_run_dir).name,
