@@ -9,38 +9,20 @@ from pathlib import Path
 from typing import Any
 
 from shared import fs as _fs_utils
-from shared import step07 as _step07_shared
 from shared.jsonio import load_jsonl
-from shared.paths import PROJECT_HOME, RESULT_DIR
+from shared.paths import RESULT_DIR
 from shared.pipeline_runs import find_latest_pipeline_run_dir
 from shared.signatures import load_signature_payload
+from shared.step07_export_core import run_step07_export_core
+from shared.step07_sources import (
+    build_source_file_candidates,
+    candidate_languages_for_source,
+    extract_defined_function_names,
+)
 
 from stage.slices import process_signature_db
 
-CPP_LIKE_SUFFIXES = {'.cpp', '.cc', '.cxx', '.c++', '.hpp', '.hh', '.hxx'}
-ROLE_SORT_ORDER = {'b2b': 0, 'counterpart': 1}
 DATASET_BASENAME = 'train_patched_counterparts'
-PROJECT_HOME_PATH = Path(PROJECT_HOME).resolve()
-
-normalize_artifact_path = _step07_shared.normalize_artifact_path
-unique_in_order = _step07_shared.unique_in_order
-build_dedup_audit_row = _step07_shared.build_dedup_audit_row
-extract_std_bug_trace = _step07_shared.extract_std_bug_trace
-load_tree_sitter_parsers = _step07_shared.load_tree_sitter_parsers
-candidate_languages_for_source = _step07_shared.candidate_languages_for_source
-node_text = _step07_shared.node_text
-extract_function_name_from_declarator = _step07_shared.extract_function_name_from_declarator
-extract_defined_function_names = _step07_shared.extract_defined_function_names
-dedupe_paths = _step07_shared.dedupe_paths
-build_source_file_candidates = _step07_shared.build_source_file_candidates
-lex_c_like = _step07_shared.lex_c_like
-previous_meaningful_token = _step07_shared.previous_meaningful_token
-next_meaningful_token = _step07_shared.next_meaningful_token
-normalize_slice_function_names = _step07_shared.normalize_slice_function_names
-find_slice_path = _step07_shared.find_slice_path
-compact_code_for_hash = _step07_shared.compact_code_for_hash
-normalized_code_md5 = _step07_shared.normalized_code_md5
-dedupe_pairs_by_normalized_rows = _step07_shared.dedupe_pairs_by_normalized_rows
 prepare_target = _fs_utils.prepare_target
 remove_target = _fs_utils.remove_target
 
@@ -478,7 +460,7 @@ def export_dataset(
     ]:
         prepare_target(target, overwrite=overwrite)
 
-    return _step07_shared.run_step07_export_core(
+    return run_step07_export_core(
         pairs=pairs,
         paired_signatures_dir=paired_signatures_dir,
         slice_dir=slice_dir,

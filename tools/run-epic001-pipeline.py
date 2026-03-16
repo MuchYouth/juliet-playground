@@ -5,11 +5,12 @@ from pathlib import Path
 from typing import List, Optional
 
 import typer
+from shared import step07_dedup as _step07_dedup
 from shared.paths import PROJECT_HOME, PULSE_TAINT_CONFIG, RESULT_DIR
 from stage import pipeline as _pipeline_run
 
 compute_pair_split = _pipeline_run.compute_pair_split
-dedupe_pairs_by_normalized_rows = _pipeline_run.dedupe_pairs_by_normalized_rows
+dedupe_pairs_by_normalized_rows = _step07_dedup.dedupe_pairs_by_normalized_rows
 export_dataset_from_pipeline = _pipeline_run.export_dataset_from_pipeline
 
 

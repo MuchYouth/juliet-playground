@@ -3,20 +3,6 @@ from __future__ import annotations
 from tests.helpers import REPO_ROOT, load_module_from_path, write_jsonl
 
 
-def test_shared_step07_shim_exports_split_modules():
-    module = load_module_from_path(
-        'test_step07_shared_shim',
-        REPO_ROOT / 'tools/shared/step07.py',
-    )
-
-    assert module.normalize_artifact_path.__module__ == 'shared.step07_sources'
-    assert module.normalize_slice_function_names.__module__ == 'shared.step07_normalize'
-    assert module.dedupe_pairs_by_normalized_rows.__module__ == 'shared.step07_dedup'
-    assert module.run_step07_export_core.__module__ == 'shared.step07_export_core'
-    assert 'run_step07_export_core' in module.__all__
-    assert 'normalize_artifact_path' in module.__all__
-
-
 def test_pipeline_run_uses_shared_step07_core(tmp_path, monkeypatch):
     module = load_module_from_path(
         'test_step07_shared_pipeline',
@@ -51,7 +37,7 @@ def test_pipeline_run_uses_shared_step07_core(tmp_path, monkeypatch):
             'counts': {},
         }
 
-    monkeypatch.setattr(module._step07_shared, 'run_step07_export_core', fake_core)
+    monkeypatch.setattr(module, 'run_step07_export_core', fake_core)
 
     result = module.export_dataset_from_pipeline(
         pairs_jsonl=pairs_jsonl,
@@ -101,7 +87,7 @@ def test_patched_counterparts_uses_shared_step07_core(tmp_path, monkeypatch):
             'counts': {'pairs_total': 2},
         }
 
-    monkeypatch.setattr(module._step07_shared, 'run_step07_export_core', fake_core)
+    monkeypatch.setattr(module, 'run_step07_export_core', fake_core)
 
     result = module.export_dataset(
         pairs=pairs,
