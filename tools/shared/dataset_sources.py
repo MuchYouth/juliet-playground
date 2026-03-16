@@ -4,6 +4,7 @@ from pathlib import Path
 from typing import Any
 
 from shared.paths import PROJECT_HOME
+from shared.source_parsing import extract_function_name_from_declarator
 from shared.traces import extract_std_bug_trace
 
 CPP_LIKE_SUFFIXES = {'.cpp', '.cc', '.cxx', '.c++', '.hpp', '.hh', '.hxx'}
@@ -52,33 +53,6 @@ def candidate_languages_for_source(path: Path) -> list[str]:
 
 def node_text(node, source_bytes: bytes) -> str:
     return source_bytes[node.start_byte : node.end_byte].decode('utf-8', errors='ignore')
-
-
-def extract_function_name_from_declarator(node, source_bytes: bytes) -> str | None:
-    if node is None:
-        return None
-
-    current = node
-    for _ in range(12):
-        next_node = current.child_by_field_name('declarator')
-        if next_node is None:
-            break
-        current = next_node
-
-    if current.type in {'identifier', 'field_identifier'}:
-        return node_text(current, source_bytes)
-
-    name_node = current.child_by_field_name('name')
-    if name_node is not None and name_node.type in {'identifier', 'field_identifier'}:
-        return node_text(name_node, source_bytes)
-
-    stack = [current]
-    while stack:
-        candidate = stack.pop()
-        if candidate.type in {'identifier', 'field_identifier'}:
-            return node_text(candidate, source_bytes)
-        stack.extend(reversed(candidate.children))
-    return None
 
 
 def extract_defined_function_names(root_node, source_bytes: bytes) -> set[str]:

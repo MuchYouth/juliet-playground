@@ -9,6 +9,12 @@ from pathlib import Path
 
 from shared.dataset_sources import load_tree_sitter_parsers
 from shared.juliet_manifest import build_manifest_source_index
+from shared.source_parsing import (
+    PARSER_LANG_BY_SUFFIX,
+    SOURCE_EXTS,
+    extract_function_name_from_declarator,
+    node_first_line_text,
+)
 
 
 def new_stats() -> dict:
@@ -25,27 +31,11 @@ def inc(stats: dict, key: str, n: int = 1) -> None:
     stats[key] += n
 
 
-SOURCE_EXTS = {'.c', '.cpp', '.h'}
 FLAW_RE = re.compile(
     r'^\s*/\*+\s*(?!.*\bINCIDENTAL\s+FLAW\b).*\b(?:POTENTIAL\s+)?FLAW\b',
     re.IGNORECASE,
 )
 FIX_RE = re.compile(r'^\s*/\*+\s*FIX\b', re.IGNORECASE)
-FILE_LANG = {'.c': 'c', '.cpp': 'cpp'}
-
-
-def _extract_function_name_from_declarator(decl_node, source_bytes: bytes) -> str | None:
-    stack = [decl_node]
-    while stack:
-        node = stack.pop()
-        if node.type in {'identifier', 'field_identifier', 'qualified_identifier'}:
-            return (
-                source_bytes[node.start_byte : node.end_byte]
-                .decode('utf-8', errors='ignore')
-                .strip()
-            )
-        stack.extend(reversed(node.children))
-    return None
 
 
 def _match_comments_to_functions(
@@ -68,11 +58,6 @@ def _match_comments_to_functions(
     return matched
 
 
-def _node_first_line_text(node, source_bytes: bytes) -> str:
-    text = source_bytes[node.start_byte : node.end_byte].decode('utf-8', errors='ignore')
-    return (text.splitlines()[0] if text else '').strip()
-
-
 def _classify_comment_tag(comment_text: str) -> str | None:
     first_line = comment_text.splitlines()[0] if comment_text else ''
     if FLAW_RE.search(first_line):
@@ -86,7 +71,7 @@ def _parse_file(
     content: str, suffix: str, parsers: dict[str, object]
 ) -> tuple[list[tuple[int, int, str]], list[tuple[int, str, str]], bool]:
     source_bytes = content.encode('utf-8', errors='ignore')
-    language_name = FILE_LANG.get(suffix)
+    language_name = PARSER_LANG_BY_SUFFIX.get(suffix)
     parser = parsers.get(language_name) if language_name else None
     if not parser:
         return [], [], True
@@ -102,7 +87,7 @@ def _parse_file(
         if node.type == 'function_definition':
             decl = node.child_by_field_name('declarator')
             if decl is not None:
-                name = _extract_function_name_from_declarator(decl, source_bytes)
+                name = extract_function_name_from_declarator(decl, source_bytes)
                 if name:
                     function_spans.append((node.start_point[0] + 1, node.end_point[0] + 1, name))
         elif node.type == 'comment':
@@ -121,7 +106,7 @@ def _parse_file(
                         (
                             prev_named.start_point[0] + 1,
                             tag,
-                            f'[INLINE] {_node_first_line_text(prev_named, source_bytes)}',
+                            f'[INLINE] {node_first_line_text(prev_named, source_bytes)}',
                         )
                     )
                 else:
@@ -133,7 +118,7 @@ def _parse_file(
                             (
                                 target.start_point[0] + 1,
                                 tag,
-                                _node_first_line_text(target, source_bytes),
+                                node_first_line_text(target, source_bytes),
                             )
                         )
                     else:
@@ -167,7 +152,7 @@ def scan_manifest_comments(
         if src is None:
             inc(stats, 'missing_files')
             continue
-        if src.suffix.lower() not in FILE_LANG:
+        if src.suffix.lower() not in PARSER_LANG_BY_SUFFIX:
             continue
 
         inc(stats, 'scanned_files')

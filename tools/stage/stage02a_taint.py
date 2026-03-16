@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import argparse
-import csv
 import json
 import re
 import xml.etree.ElementTree as ET
@@ -10,13 +9,14 @@ from collections import Counter
 from dataclasses import dataclass
 from pathlib import Path
 
+from shared.csvio import write_csv_rows
 from shared.dataset_sources import load_tree_sitter_parsers
+from shared.jsonio import write_json, write_jsonl
 from shared.juliet_manifest import build_manifest_source_index
+from shared.source_parsing import PARSER_LANG_BY_SUFFIX, SOURCE_EXTS, node_first_line_text
 
 TARGET_COMMENT_TAGS = ('comment_flaw', 'comment_fix')
 TARGET_ALL_TAGS = (*TARGET_COMMENT_TAGS, 'flaw')
-SOURCE_EXTS = {'.c', '.cpp', '.h'}
-PARSER_LANG = {'.c': 'c', '.cpp': 'cpp'}
 DEFAULT_PULSE_TAINT_CONFIG_NAME = 'pulse-taint-config.from_juliet.json'
 RAND_ALIAS_MAP = {'RAND32': 'rand', 'RAND64': 'rand'}
 
@@ -54,11 +54,6 @@ class ResolutionResult:
     selected_conditional: str
 
 
-def _node_first_line_text(node, source_bytes: bytes) -> str:
-    text = source_bytes[node.start_byte : node.end_byte].decode('utf-8', errors='ignore')
-    return (text.splitlines()[0] if text else '').strip()
-
-
 def _build_line_nodes(root_node) -> dict[int, list[object]]:
     line_nodes: dict[int, list[object]] = {}
     stack = [root_node]
@@ -79,7 +74,7 @@ def _choose_node(
         return None
 
     if target_text is not None:
-        matched = [n for n in candidates if _node_first_line_text(n, source_bytes) == target_text]
+        matched = [n for n in candidates if node_first_line_text(n, source_bytes) == target_text]
         if matched:
             return min(matched, key=lambda n: n.end_byte - n.start_byte)
 
@@ -125,7 +120,7 @@ def _load_file_context(src: Path, parsers: dict[str, object]) -> FileContext:
     source_lines = content.splitlines()
     line_nodes: dict[int, list[object]] = {}
 
-    language_name = PARSER_LANG.get(src.suffix.lower())
+    language_name = PARSER_LANG_BY_SUFFIX.get(src.suffix.lower())
     parser = parsers.get(language_name) if language_name else None
     if parser is not None:
         try:
@@ -146,7 +141,7 @@ def _fallback_line_text(ctx: FileContext, line_no: int) -> str:
 def _derive_flaw_key(ctx: FileContext, line_no: int) -> str:
     node = _choose_node(ctx.line_nodes, ctx.source_bytes, line_no, target_text=None)
     if node is not None:
-        text = _node_first_line_text(node, ctx.source_bytes)
+        text = node_first_line_text(node, ctx.source_bytes)
         if text:
             return text
     line_text = _fallback_line_text(ctx, line_no)
@@ -204,11 +199,11 @@ def _write_global_macro_dump(
         )
         by_name[name] = bodies
 
-    json_path.write_text(json.dumps(by_name, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
-
-    with jsonl_path.open('w', encoding='utf-8') as f:
-        for name, bodies in by_name.items():
-            f.write(json.dumps({'name': name, 'bodies': bodies}, ensure_ascii=False) + '\n')
+    write_json(json_path, by_name)
+    write_jsonl(
+        jsonl_path,
+        ({'name': name, 'bodies': bodies} for name, bodies in by_name.items()),
+    )
 
     rows = sum(len(v) for v in by_name.values())
     return {
@@ -297,30 +292,29 @@ def _write_macro_resolution_csv(
     output_dir: Path, resolution_map: dict[str, ResolutionResult]
 ) -> dict[str, int]:
     path = output_dir / 'function_name_macro_resolution.csv'
-    with path.open('w', encoding='utf-8', newline='') as f:
-        writer = csv.writer(f)
-        writer.writerow(
+    write_csv_rows(
+        path,
+        [
+            'original_name',
+            'resolved_names',
+            'resolution_status',
+            'candidate_count',
+            'selected_kind',
+            'selected_conditional',
+        ],
+        (
             [
-                'original_name',
-                'resolved_names',
-                'resolution_status',
-                'candidate_count',
-                'selected_kind',
-                'selected_conditional',
+                raw_name,
+                '|'.join(rr.resolved_names),
+                rr.status,
+                rr.candidate_count,
+                rr.selected_kind,
+                rr.selected_conditional,
             ]
-        )
-        for raw_name in sorted(resolution_map):
-            rr = resolution_map[raw_name]
-            writer.writerow(
-                [
-                    raw_name,
-                    '|'.join(rr.resolved_names),
-                    rr.status,
-                    rr.candidate_count,
-                    rr.selected_kind,
-                    rr.selected_conditional,
-                ]
-            )
+            for raw_name in sorted(resolution_map)
+            for rr in [resolution_map[raw_name]]
+        ),
+    )
 
     statuses = Counter(rr.status for rr in resolution_map.values())
     return {
@@ -358,10 +352,7 @@ def _write_pulse_taint_config(
 ) -> dict[str, int]:
     function_names = sorted(function_name_counts)
     config = _build_pulse_taint_config(function_names)
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-    output_path.write_text(
-        json.dumps(config, ensure_ascii=False, indent=2) + '\n', encoding='utf-8'
-    )
+    write_json(output_path, config)
     return {
         'pulse_source_procedures': len(config['pulse-taint-sources']) // 2,
         'pulse_sink_procedures': len(config['pulse-taint-sinks']),
@@ -384,22 +375,23 @@ def write_outputs(
         '\n'.join(unique_codes) + ('\n' if unique_codes else ''), encoding='utf-8'
     )
 
-    with (output_dir / 'code_frequency.csv').open('w', encoding='utf-8', newline='') as f:
-        writer = csv.writer(f)
-        writer.writerow(['count', 'code'])
-        for code, cnt in sorted(counts.items(), key=lambda x: (-x[1], x[0])):
-            writer.writerow([cnt, code])
-
-    (output_dir / 'source_sink_candidate_map.json').write_text(
-        json.dumps(candidate_map, ensure_ascii=False, indent=2) + '\n', encoding='utf-8'
+    write_csv_rows(
+        output_dir / 'code_frequency.csv',
+        ['count', 'code'],
+        ([cnt, code] for code, cnt in sorted(counts.items(), key=lambda x: (-x[1], x[0]))),
     )
 
+    write_json(output_dir / 'source_sink_candidate_map.json', candidate_map)
+
     function_name_counts = _count_function_names(candidate_map)
-    with (output_dir / 'function_name_frequency.csv').open('w', encoding='utf-8', newline='') as f:
-        writer = csv.writer(f)
-        writer.writerow(['count', 'function_name'])
-        for name, cnt in sorted(function_name_counts.items(), key=lambda x: (-x[1], x[0])):
-            writer.writerow([cnt, name])
+    write_csv_rows(
+        output_dir / 'function_name_frequency.csv',
+        ['count', 'function_name'],
+        (
+            [cnt, name]
+            for name, cnt in sorted(function_name_counts.items(), key=lambda x: (-x[1], x[0]))
+        ),
+    )
 
     (output_dir / 'function_name_unique.txt').write_text(
         '\n'.join(sorted(function_name_counts)) + ('\n' if function_name_counts else ''),
@@ -418,9 +410,7 @@ def write_outputs(
         'flaw_records_processed': flaw_records_processed,
         **extra_stats,
     }
-    (output_dir / 'summary.json').write_text(
-        json.dumps(summary, ensure_ascii=False, indent=2) + '\n', encoding='utf-8'
-    )
+    write_json(output_dir / 'summary.json', summary)
     return function_name_counts
 
 
