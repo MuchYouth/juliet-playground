@@ -351,6 +351,7 @@ def run_infer_and_signature(
     infer_results_root: Optional[Path],
     signatures_root: Path,
     summary_json: Optional[Path],
+    minimal_outputs: bool = False,
 ) -> dict[str, object]:
     pulse_taint_config = pulse_taint_config.resolve()
     if not pulse_taint_config.exists():
@@ -393,8 +394,11 @@ def run_infer_and_signature(
                 cwe_dir, str(infer_run_dir), str(pulse_taint_config)
             )
 
-    result_csv = generate_result_csv(result_map, str(infer_run_dir))
-    no_issue_txt = generate_no_issue_files(result_map, str(infer_run_dir))
+    result_csv: Path | None = None
+    no_issue_txt: Path | None = None
+    if not minimal_outputs:
+        result_csv = generate_result_csv(result_map, str(infer_run_dir))
+        no_issue_txt = generate_no_issue_files(result_map, str(infer_run_dir))
 
     signature_output_dir = generate_signatures(
         input_dir=Path(infer_run_dir),
@@ -419,11 +423,13 @@ def run_infer_and_signature(
         'signatures_root': str(signatures_root),
         'signature_output_dir': str(signature_output_dir),
         'signature_non_empty_dir': str(signature_non_empty_dir),
-        'analysis_result_csv': str(result_csv),
-        'analysis_no_issue_files': str(no_issue_txt),
         'result_by_target': compact,
         'totals': totals,
     }
+    if result_csv is not None:
+        summary_payload['analysis_result_csv'] = str(result_csv)
+    if no_issue_txt is not None:
+        summary_payload['analysis_no_issue_files'] = str(no_issue_txt)
 
     if summary_json is not None:
         summary_json = summary_json.resolve()

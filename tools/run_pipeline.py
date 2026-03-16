@@ -3,12 +3,8 @@ from __future__ import annotations
 
 import argparse
 import datetime
-import io
-import json
 import sys
-import time
-from contextlib import redirect_stderr, redirect_stdout
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable, Optional
 
@@ -24,7 +20,6 @@ from shared.artifact_layout import (
     build_patched_pairing_paths,
     build_slice_stage_paths,
 )
-from shared.jsonio import write_json
 from shared.paths import PROJECT_HOME, PULSE_TAINT_CONFIG, RESULT_DIR
 from stage import stage01_manifest as _stage01_manifest
 from stage import stage02a_taint as _stage02a_taint
@@ -58,20 +53,6 @@ class FullRunConfig:
     pair_split_seed: int
     pair_train_ratio: float
     dedup_mode: str
-
-
-@dataclass
-class RunExecutionState:
-    started_at: str
-    steps: dict[str, dict[str, object]] = field(default_factory=dict)
-    status: str = 'success'
-    error_message: Optional[str] = None
-    selected_taint_config: Optional[Path] = None
-    selected_reason: Optional[str] = None
-    infer_summary: dict[str, object] = field(default_factory=dict)
-    signature_non_empty_dir: Optional[Path] = None
-    ended_at: Optional[str] = None
-    total_duration_sec: float = 0.0
 
 
 @dataclass(frozen=True)
@@ -143,10 +124,6 @@ def now_ts() -> str:
     return datetime.datetime.now().strftime('%Y.%m.%d-%H:%M:%S')
 
 
-def now_iso_utc() -> str:
-    return datetime.datetime.now(datetime.timezone.utc).isoformat()
-
-
 def _build_full_run_paths(*, run_dir: Path, source_root: Path) -> FullRunPaths:
     run_dir = run_dir.resolve()
     source_root = source_root.resolve()
@@ -204,51 +181,13 @@ def run_internal_step(
     logs_dir: Path,
     fn: Callable[[], dict[str, object]],
 ) -> dict[str, object]:
-    started_at = now_iso_utc()
-    started_perf = time.perf_counter()
-    stdout_buffer = io.StringIO()
-    stderr_buffer = io.StringIO()
-    result_payload: dict[str, object] = {}
-    captured_exc: Exception | None = None
-
-    try:
-        with redirect_stdout(stdout_buffer), redirect_stderr(stderr_buffer):
-            payload = fn()
-            if hasattr(payload, 'to_payload'):
-                payload = payload.to_payload()
-            if isinstance(payload, dict):
-                result_payload = payload
-    except Exception as exc:  # pragma: no cover - surfaced to caller
-        captured_exc = exc
-    finally:
-        duration_sec = round(time.perf_counter() - started_perf, 6)
-        ended_at = now_iso_utc()
-        logs_dir.mkdir(parents=True, exist_ok=True)
-        stdout_text = stdout_buffer.getvalue()
-        stderr_text = stderr_buffer.getvalue()
-        stdout_log = logs_dir / f'{step_key}.stdout.log'
-        stderr_log = logs_dir / f'{step_key}.stderr.log'
-        stdout_log.write_text(stdout_text, encoding='utf-8')
-        stderr_log.write_text(stderr_text, encoding='utf-8')
-        if stdout_text:
-            print(stdout_text, end='' if stdout_text.endswith('\n') else '\n')
-        if stderr_text:
-            print(stderr_text, file=sys.stderr, end='' if stderr_text.endswith('\n') else '\n')
-
-    if captured_exc is not None:
-        raise captured_exc
-
-    result = {
-        'executor': 'internal',
-        'returncode': 0,
-        'started_at': started_at,
-        'ended_at': ended_at,
-        'duration_sec': duration_sec,
-        'stdout_log': str(stdout_log),
-        'stderr_log': str(stderr_log),
-    }
-    result.update(result_payload)
-    return result
+    del step_key, logs_dir
+    payload = fn()
+    if hasattr(payload, 'to_payload'):
+        payload = payload.to_payload()
+    if isinstance(payload, dict):
+        return payload
+    return {}
 
 
 def _validate_full_inputs(config: FullRunConfig) -> None:
@@ -363,6 +302,7 @@ def run_step02a_code_field_inventory(
         source_root=source_root,
         output_dir=paths.taint_dir,
         pulse_taint_config_output=paths.generated_taint_config,
+        minimal_outputs=True,
         required_outputs=[
             (
                 paths.generated_taint_config,
@@ -372,42 +312,27 @@ def run_step02a_code_field_inventory(
     )
 
 
-def run_step02b_flow_build(*, paths: FullRunPaths) -> dict[str, dict[str, object]]:
-    stage02b_output_paths = paths.stage02b
-    results: dict[str, dict[str, object]] = {}
-    results['02b_function_inventory_extract'] = run_internal_step(
-        '02b_function_inventory_extract',
+def run_step02b_flow_build(*, paths: FullRunPaths) -> dict[str, object]:
+    result = run_internal_step(
+        '02b_testcase_flow_build',
         logs_dir=paths.logs_dir,
-        fn=lambda: _stage02b_flow.extract_function_inventory(
+        fn=lambda: _stage02b_flow.run_stage02b_flow(
             input_xml=paths.manifest_with_comments_xml,
-            output_csv=stage02b_output_paths.function_names_unique_csv,
-            output_summary=stage02b_output_paths.function_inventory_summary_json,
-        ),
-    )
-    results['02b_function_inventory_categorize'] = run_internal_step(
-        '02b_function_inventory_categorize',
-        logs_dir=paths.logs_dir,
-        fn=lambda: _stage02b_flow.categorize_function_names(
-            input_csv=stage02b_output_paths.function_names_unique_csv,
-            manifest_xml=paths.manifest_with_comments_xml,
             source_root=paths.source_testcases_root,
-            output_jsonl=stage02b_output_paths.function_names_categorized_jsonl,
-            output_nested_json=stage02b_output_paths.grouped_family_role_json,
-            output_summary=stage02b_output_paths.category_summary_json,
+            output_dir=paths.flow_dir,
+            minimal_outputs=True,
         ),
     )
-    results['02b_testcase_flow_partition'] = run_internal_step(
-        '02b_testcase_flow_partition',
-        logs_dir=paths.logs_dir,
-        fn=lambda: _stage02b_flow.add_flow_tags_to_testcase(
-            input_xml=paths.manifest_with_comments_xml,
-            function_categories_jsonl=stage02b_output_paths.function_names_categorized_jsonl,
-            output_xml=stage02b_output_paths.manifest_with_testcase_flows_xml,
-            summary_json=stage02b_output_paths.testcase_flow_summary_json,
-        ),
+    _require_all(
+        [
+            (
+                paths.stage02b.manifest_with_testcase_flows_xml,
+                'Expected manifest_with_testcase_flows_xml not found: '
+                f'{paths.stage02b.manifest_with_testcase_flows_xml}',
+            )
+        ]
     )
-    _require_all(stage02b_output_paths.required_outputs())
-    return results
+    return result
 
 
 def run_step03_infer_and_signature(
@@ -429,27 +354,18 @@ def run_step03_infer_and_signature(
             pulse_taint_config=selected_taint_config,
             infer_results_root=paths.infer_results_root,
             signatures_root=paths.signatures_root,
-            summary_json=paths.infer_summary_json,
+            summary_json=None,
+            minimal_outputs=True,
         ),
     )
 
-    _require_all(
-        [
-            (
-                paths.infer_summary_json,
-                f'Infer summary JSON not found: {paths.infer_summary_json}',
-            )
-        ]
-    )
-    infer_summary = json.loads(paths.infer_summary_json.read_text(encoding='utf-8'))
-
-    signature_non_empty_raw = infer_summary.get('signature_non_empty_dir')
+    signature_non_empty_raw = result.get('signature_non_empty_dir')
     if signature_non_empty_raw:
         signature_non_empty_dir = Path(signature_non_empty_raw)
     else:
-        signature_output_dir = infer_summary.get('signature_output_dir')
+        signature_output_dir = result.get('signature_output_dir')
         if not signature_output_dir:
-            raise RuntimeError('signature_output_dir not found in infer summary')
+            raise RuntimeError('signature_output_dir not found in infer result')
         signature_non_empty_dir = Path(signature_output_dir) / 'non_empty'
 
     _require_all(
@@ -461,7 +377,7 @@ def run_step03_infer_and_signature(
         ]
     )
 
-    return result, infer_summary, signature_non_empty_dir
+    return result, result, signature_non_empty_dir
 
 
 def run_step04_trace_flow(
@@ -476,6 +392,7 @@ def run_step04_trace_flow(
         flow_xml=paths.stage02b.manifest_with_testcase_flows_xml,
         signatures_dir=signature_non_empty_dir,
         output_dir=paths.trace_dir,
+        minimal_outputs=True,
         required_outputs=[
             (
                 paths.trace_strict_jsonl,
@@ -494,6 +411,7 @@ def run_step05_pair_trace(*, paths: FullRunPaths) -> dict[str, object]:
         output_dir=paths.pair.output_dir,
         overwrite=False,
         run_dir=paths.run_dir,
+        minimal_outputs=True,
         required_outputs=paths.pair.required_outputs(),
     )
 
@@ -507,6 +425,7 @@ def run_step06_slices(*, paths: FullRunPaths) -> dict[str, object]:
         output_dir=paths.slices.output_dir,
         overwrite=False,
         run_dir=paths.run_dir,
+        minimal_outputs=True,
         required_outputs=paths.slices.required_outputs(),
     )
 
@@ -530,6 +449,7 @@ def run_step07_dataset_export(
             split_seed=pair_split_seed,
             train_ratio=pair_train_ratio,
             dedup_mode=dedup_mode,
+            minimal_outputs=True,
         ),
         required_outputs=paths.dataset.required_outputs(),
     )
@@ -554,86 +474,6 @@ def run_step07b_train_patched_counterparts(
     )
 
 
-def _summarize_steps(steps: dict[str, dict[str, object]]) -> dict[str, dict[str, object]]:
-    keys = (
-        'returncode',
-        'started_at',
-        'ended_at',
-        'duration_sec',
-        'stdout_log',
-        'stderr_log',
-    )
-    return {
-        step_key: {key: value[key] for key in keys if key in value}
-        for step_key, value in steps.items()
-    }
-
-
-def _build_run_summary_payload(
-    config: FullRunConfig,
-    paths: FullRunPaths,
-    state: RunExecutionState,
-) -> dict[str, object]:
-    selected_taint_config_str = (
-        str(state.selected_taint_config.resolve())
-        if state.selected_taint_config is not None
-        else None
-    )
-
-    return {
-        'status': state.status,
-        'error_message': state.error_message,
-        'started_at': state.started_at,
-        'ended_at': state.ended_at,
-        'duration_sec': state.total_duration_sec,
-        'run': {
-            'pipeline_root': str(config.pipeline_root),
-            'run_id': config.run_id,
-            'run_dir': str(paths.run_dir),
-        },
-        'inputs': {
-            'manifest': str(config.manifest),
-            'source_root': str(config.source_root),
-            'mode': 'files' if config.files else ('all' if config.all_cwes else 'cwes'),
-            'cwes': config.cwes or [],
-            'files': config.files,
-        },
-        'config': {
-            'pair_split_seed': config.pair_split_seed,
-            'pair_train_ratio': config.pair_train_ratio,
-            'dedup_mode': config.dedup_mode,
-            'selected_taint_config_path': selected_taint_config_str,
-            'selected_reason': state.selected_reason,
-        },
-        'steps': _summarize_steps(state.steps),
-        'outputs': {
-            'stage01': {'output_dir': str(paths.manifest_dir)},
-            'stage02a': {'output_dir': str(paths.taint_dir)},
-            'stage02b': {'output_dir': str(paths.stage02b.output_dir)},
-            'stage03': {
-                'infer_summary_json': str(paths.infer_summary_json),
-                'signature_non_empty_dir': str(state.signature_non_empty_dir)
-                if state.signature_non_empty_dir is not None
-                else None,
-            },
-            'stage04': {'trace_flow_match_strict_jsonl': str(paths.trace_strict_jsonl)},
-            'stage05': {'output_dir': str(paths.pair.output_dir)},
-            'stage06': {
-                'output_dir': str(paths.slices.output_dir),
-                'slice_dir': str(paths.slices.slice_dir),
-            },
-            'stage07': {
-                'output_dir': str(paths.dataset.output_dir),
-                'summary_json': str(paths.dataset.summary_json),
-            },
-            'stage07b': {
-                'output_dir': str(paths.patched_dataset.output_dir),
-                'summary_json': str(paths.patched_dataset.summary_json),
-            },
-        },
-    }
-
-
 def run_full_pipeline(
     config: FullRunConfig,
 ) -> int:
@@ -645,66 +485,45 @@ def run_full_pipeline(
     run_dir.mkdir(parents=True, exist_ok=True)
     paths = _build_full_run_paths(run_dir=run_dir, source_root=config.source_root)
 
-    state = RunExecutionState(started_at=now_iso_utc())
-    started_perf = time.perf_counter()
-
     try:
-        state.steps['01_manifest_comment_scan'] = run_step01_manifest_comment_scan(
+        run_step01_manifest_comment_scan(
             paths=paths,
             manifest=config.manifest,
             source_root=config.source_root,
         )
-        state.steps['02a_code_field_inventory'] = run_step02a_code_field_inventory(
+        run_step02a_code_field_inventory(
             paths=paths,
             source_root=config.source_root,
         )
-        state.steps.update(run_step02b_flow_build(paths=paths))
+        run_step02b_flow_build(paths=paths)
 
-        state.selected_taint_config, state.selected_reason = _select_taint_config(
+        selected_taint_config, _ = _select_taint_config(
             generated_taint_config=paths.generated_taint_config,
             committed_taint_config=config.committed_taint_config,
         )
-        (
-            state.steps['03_infer_and_signature'],
-            state.infer_summary,
-            state.signature_non_empty_dir,
-        ) = run_step03_infer_and_signature(
+        _, _, signature_non_empty_dir = run_step03_infer_and_signature(
             paths=paths,
-            selected_taint_config=state.selected_taint_config,
+            selected_taint_config=selected_taint_config,
             files=config.files,
             all_cwes=config.all_cwes,
             cwes=config.cwes,
         )
-        state.steps['04_trace_flow_filter'] = run_step04_trace_flow(
+        run_step04_trace_flow(
             paths=paths,
-            signature_non_empty_dir=state.signature_non_empty_dir,
+            signature_non_empty_dir=signature_non_empty_dir,
         )
-        state.steps['05_pair_trace_dataset'] = run_step05_pair_trace(paths=paths)
-        state.steps['06_generate_slices'] = run_step06_slices(paths=paths)
-        state.steps['07_dataset_export'] = run_step07_dataset_export(
+        run_step05_pair_trace(paths=paths)
+        run_step06_slices(paths=paths)
+        run_step07_dataset_export(
             paths=paths,
             pair_split_seed=config.pair_split_seed,
             pair_train_ratio=config.pair_train_ratio,
             dedup_mode=config.dedup_mode,
         )
-        state.steps['07b_train_patched_counterparts_export'] = (
-            run_step07b_train_patched_counterparts(
-                paths=paths,
-                dedup_mode=config.dedup_mode,
-            )
-        )
     except Exception as exc:
-        state.status = 'failed'
-        state.error_message = str(exc)
-
-    state.ended_at = now_iso_utc()
-    state.total_duration_sec = round(time.perf_counter() - started_perf, 6)
-
-    summary_payload = _build_run_summary_payload(config, paths, state)
-    write_json(paths.run_summary_path, summary_payload)
-
-    print(json.dumps(summary_payload, ensure_ascii=False))
-    return 0 if state.status == 'success' else 1
+        print(str(exc), file=sys.stderr)
+        return 1
+    return 0
 
 
 def main() -> int:

@@ -211,6 +211,7 @@ def generate_slices(
     overwrite: bool = False,
     run_dir: Path | None = None,
     dataset_basename: str | None = None,
+    minimal_outputs: bool = False,
 ) -> dict[str, Any]:
     validate_args(signature_db_dir, old_prefix=old_prefix, new_prefix=new_prefix)
     prepare_output_dir(output_dir, overwrite)
@@ -235,5 +236,6 @@ def generate_slices(
     if dataset_basename is not None:
         summary_payload['dataset_basename'] = dataset_basename
     summary_path = output_dir / 'summary.json'
-    write_summary_json(summary_path, summary_payload)
+    if not minimal_outputs:
+        write_summary_json(summary_path, summary_payload)
     return summary_payload

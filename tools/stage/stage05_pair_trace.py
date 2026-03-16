@@ -140,7 +140,12 @@ def select_best_record(records: list[StrictTraceRecord]) -> StrictTraceRecord | 
 
 
 def build_paired_trace_dataset(
-    *, trace_jsonl: Path, output_dir: Path, overwrite: bool = False, run_dir: Path | None = None
+    *,
+    trace_jsonl: Path,
+    output_dir: Path,
+    overwrite: bool = False,
+    run_dir: Path | None = None,
+    minimal_outputs: bool = False,
 ) -> dict[str, Any]:
     validate_args(trace_jsonl)
     prepare_output_dir(output_dir, overwrite)
@@ -311,5 +316,6 @@ def build_paired_trace_dataset(
         'leftover_counterparts': len(leftovers),
         'selected_counterpart_flow_counts': dict(counterpart_flow_counter),
     }
-    write_summary_json(summary_json, summary_payload)
+    if not minimal_outputs:
+        write_summary_json(summary_json, summary_payload)
     return summary_payload

@@ -21,14 +21,19 @@ class PrimaryDatasetExportParams:
     split_seed: int
     train_ratio: float
     dedup_mode: str
+    minimal_outputs: bool = False
 
 
 @dataclass(frozen=True)
 class PrimaryDatasetExportResult:
     dataset: DatasetExportPaths
+    minimal_outputs: bool = False
 
     def to_payload(self) -> dict[str, object]:
-        return {'dataset': self.dataset.to_payload()}
+        include = ('output_dir', 'csv_path', 'normalized_slices_dir', 'split_manifest_json')
+        if not self.minimal_outputs:
+            include = None
+        return {'dataset': self.dataset.to_payload(include=include)}
 
 
 def load_pairs_jsonl(path: Path) -> list[dict[str, Any]]:
@@ -75,6 +80,7 @@ def export_primary_dataset(params: PrimaryDatasetExportParams) -> PrimaryDataset
             slice_dir=params.slice_dir,
             export_paths=dataset_paths,
             dedup_mode=params.dedup_mode,
+            minimal_outputs=params.minimal_outputs,
             split_assignments_fn=lambda pair_ids: compute_pair_split(
                 pair_ids, train_ratio=params.train_ratio, seed=params.split_seed
             ),
@@ -82,7 +88,7 @@ def export_primary_dataset(params: PrimaryDatasetExportParams) -> PrimaryDataset
             build_source_file_candidates_fn=build_source_file_candidates,
         )
     )
-    return PrimaryDatasetExportResult(dataset=dataset_paths)
+    return PrimaryDatasetExportResult(dataset=dataset_paths, minimal_outputs=params.minimal_outputs)
 
 
 def export_dataset_from_pipeline(

@@ -220,6 +220,16 @@ def _write_global_macro_dump(
     }
 
 
+def _build_global_macro_dump_stats(macro_defs: dict[str, list[MacroDefinition]]) -> dict[str, int]:
+    rows = 0
+    for defs in macro_defs.values():
+        rows += len({(d.body or '').strip() for d in defs if (d.body or '').strip()})
+    return {
+        'global_macro_definition_rows': rows,
+        'global_macro_unique_names': len(macro_defs),
+    }
+
+
 def _extract_replacement_identifier(body: str) -> str | None:
     m = IDENT_RE.search(body)
     return m.group(0) if m else None
@@ -338,6 +348,21 @@ def _write_macro_resolution_csv(
     }
 
 
+def _build_macro_resolution_stats(resolution_map: dict[str, ResolutionResult]) -> dict[str, int]:
+    statuses = Counter(rr.status for rr in resolution_map.values())
+    return {
+        'macro_names_detected': sum(
+            1 for rr in resolution_map.values() if rr.status != 'no_macro_match'
+        ),
+        'macro_resolved_count': statuses['resolved_single']
+        + statuses['resolved_multi']
+        + statuses['rand_alias'],
+        'macro_ambiguous_count': statuses['resolved_multi'],
+        'macro_unresolved_count': statuses['unresolved_no_identifier'],
+        'rand_alias_applied_count': statuses['rand_alias'],
+    }
+
+
 def _build_pulse_taint_config(function_names: list[str]) -> dict[str, list[dict[str, str]]]:
     all_names = sorted(function_names)
     return {
@@ -420,6 +445,7 @@ def extract_unique_code_fields(
     source_root: Path,
     output_dir: Path,
     pulse_taint_config_output: Path | None = None,
+    minimal_outputs: bool = False,
 ) -> dict[str, object]:
     if not input_xml.exists():
         raise FileNotFoundError(f'Input XML not found: {input_xml}')
@@ -490,21 +516,26 @@ def extract_unique_code_fields(
     candidate_map = _apply_resolution_to_candidate_map(candidate_map_raw, resolution_map)
 
     output_dir.mkdir(parents=True, exist_ok=True)
-    macro_dump_stats = _write_global_macro_dump(output_dir, macro_defs)
-    macro_stats = _write_macro_resolution_csv(output_dir, resolution_map)
+    macro_dump_stats = _build_global_macro_dump_stats(macro_defs)
+    macro_stats = _build_macro_resolution_stats(resolution_map)
+    if not minimal_outputs:
+        _write_global_macro_dump(output_dir, macro_defs)
+        _write_macro_resolution_csv(output_dir, resolution_map)
     extra_stats = {**macro_dump_stats, **macro_stats}
 
-    function_name_counts = write_outputs(
-        TaintExtractionOutputs(
-            output_dir=output_dir,
-            all_comment_codes=all_comment_codes,
-            counts=counts,
-            candidate_map=candidate_map,
-            duplicate_key_skipped=duplicate_key_skipped,
-            flaw_records_processed=flaw_records_processed,
-            extra_stats=extra_stats,
+    function_name_counts = _count_function_names(candidate_map)
+    if not minimal_outputs:
+        function_name_counts = write_outputs(
+            TaintExtractionOutputs(
+                output_dir=output_dir,
+                all_comment_codes=all_comment_codes,
+                counts=counts,
+                candidate_map=candidate_map,
+                duplicate_key_skipped=duplicate_key_skipped,
+                flaw_records_processed=flaw_records_processed,
+                extra_stats=extra_stats,
+            )
         )
-    )
 
     pulse_output_path = pulse_taint_config_output or (output_dir / DEFAULT_PULSE_TAINT_CONFIG_NAME)
     pulse_stats = _write_pulse_taint_config(pulse_output_path, function_name_counts)

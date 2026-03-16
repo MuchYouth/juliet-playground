@@ -33,6 +33,7 @@ class DatasetExportRequest:
     dataset_basename: str | None = None
     prepare_target_fn: Callable[[Path, bool], None] | None = None
     overwrite: bool = False
+    minimal_outputs: bool = False
 
 
 @dataclass
@@ -69,15 +70,21 @@ def run_configured_step07_export(request: DatasetExportRequest) -> dict[str, Any
 
     request.export_paths.output_dir.mkdir(parents=True, exist_ok=True)
     if request.prepare_target_fn is not None:
-        for target in (
+        targets = [
             request.export_paths.csv_path,
-            request.export_paths.dedup_dropped_csv,
             request.export_paths.normalized_slices_dir,
-            request.export_paths.token_counts_csv,
-            request.export_paths.token_distribution_png,
             request.export_paths.split_manifest_json,
-            request.export_paths.summary_json,
-        ):
+        ]
+        if not request.minimal_outputs:
+            targets.extend(
+                [
+                    request.export_paths.dedup_dropped_csv,
+                    request.export_paths.token_counts_csv,
+                    request.export_paths.token_distribution_png,
+                    request.export_paths.summary_json,
+                ]
+            )
+        for target in targets:
             request.prepare_target_fn(target, request.overwrite)
 
     return run_step07_export_core(request)
@@ -423,8 +430,9 @@ def _write_export_artifacts(
             row['slice_filename'],
         ),
     )
-    _write_token_counts_csv(token_count_rows, request.export_paths.token_counts_csv)
-    plot_distribution_fn(token_count_rows, request.export_paths.token_distribution_png)
+    if not request.minimal_outputs:
+        _write_token_counts_csv(token_count_rows, request.export_paths.token_counts_csv)
+        plot_distribution_fn(token_count_rows, request.export_paths.token_distribution_png)
 
     split_assignments = request.split_assignments_fn(list(surviving_pairs.keys()))
     ordered_rows, pair_ids_by_dataset_type = _build_ordered_rows(surviving_pairs, split_assignments)
@@ -442,7 +450,8 @@ def _write_export_artifacts(
                 kept_unique_id_by_pair_role.get((matched_pair_id, matched_role), '')
             )
 
-    _write_dedup_audit_csv(dedup_audit_rows, request.export_paths.dedup_dropped_csv)
+    if not request.minimal_outputs:
+        _write_dedup_audit_csv(dedup_audit_rows, request.export_paths.dedup_dropped_csv)
     return token_count_rows, ordered_rows, pair_ids_by_dataset_type
 
 
@@ -542,20 +551,41 @@ def run_step07_export_core(request: DatasetExportRequest) -> dict[str, Any]:
         pair_ids_by_dataset_type,
         surviving_pairs_total=len(surviving_pairs),
     )
-    summary_payload = _build_summary_payload(
-        request=request,
-        runtime=runtime,
-        accumulator=accumulator,
-        dedup_summary=dedup_summary,
-        surviving_pairs=surviving_pairs,
-        pair_ids_by_dataset_type=pair_ids_by_dataset_type,
-        ordered_rows=ordered_rows,
-        token_count_rows=token_count_rows,
-    )
+    counts = {
+        'pairs_total': int(accumulator.counts['pairs_total']),
+        'pairs_survived': len(surviving_pairs),
+        'pairs_filtered_out': sum(accumulator.filtered_pair_reasons.values()),
+        'rows_written': len(ordered_rows),
+        'train_val_pairs': len(pair_ids_by_dataset_type.get('train_val', [])),
+        'test_pairs': len(pair_ids_by_dataset_type.get('test', [])),
+    }
 
     write_json(request.export_paths.split_manifest_json, split_manifest)
-    write_summary_json(request.export_paths.summary_json, summary_payload)
+    if not request.minimal_outputs:
+        summary_payload = _build_summary_payload(
+            request=request,
+            runtime=runtime,
+            accumulator=accumulator,
+            dedup_summary=dedup_summary,
+            surviving_pairs=surviving_pairs,
+            pair_ids_by_dataset_type=pair_ids_by_dataset_type,
+            ordered_rows=ordered_rows,
+            token_count_rows=token_count_rows,
+        )
+        write_summary_json(request.export_paths.summary_json, summary_payload)
+    dataset_fields = ('output_dir', 'csv_path', 'normalized_slices_dir', 'split_manifest_json')
+    if not request.minimal_outputs:
+        dataset_fields = (
+            'output_dir',
+            'csv_path',
+            'dedup_dropped_csv',
+            'normalized_slices_dir',
+            'token_counts_csv',
+            'token_distribution_png',
+            'split_manifest_json',
+            'summary_json',
+        )
     return {
-        'dataset': request.export_paths.to_payload(),
-        'counts': dict(summary_payload['counts']),
+        'dataset': request.export_paths.to_payload(include=dataset_fields),
+        'counts': counts,
     }

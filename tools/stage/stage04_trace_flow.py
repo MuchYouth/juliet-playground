@@ -128,7 +128,7 @@ def choose_best_flow(flow_match: dict[str, dict]) -> tuple[str | None, dict | No
 
 
 def filter_traces_by_flow(
-    *, flow_xml: Path, signatures_dir: Path, output_dir: Path
+    *, flow_xml: Path, signatures_dir: Path, output_dir: Path, minimal_outputs: bool = False
 ) -> dict[str, object]:
     if not flow_xml.exists():
         raise FileNotFoundError(f'Flow XML not found: {flow_xml}')
@@ -206,22 +206,36 @@ def filter_traces_by_flow(
     matched_path = output_dir / 'trace_flow_match_partial_or_strict.jsonl'
     summary_path = output_dir / 'summary.json'
 
-    write_jsonl(all_path, all_records)
     write_jsonl(strict_path, strict_records)
-    write_jsonl(matched_path, partial_records)
+    if not minimal_outputs:
+        write_jsonl(all_path, all_records)
+        write_jsonl(matched_path, partial_records)
 
     summary = {
         'flow_xml': str(flow_xml),
         'signatures_dir': str(signatures_dir),
         'output_dir': str(output_dir),
-        'flow_index': flow_index_stats,
-        'trace_stats': dict(stats),
         'matched_best_flow_counts': dict(matched_flow_counter),
-        'output_files': {
-            'all': str(all_path),
-            'strict': str(strict_path),
-            'partial_or_strict': str(matched_path),
-        },
     }
-    write_summary_json(summary_path, summary)
+    if not minimal_outputs:
+        summary.update(
+            {
+                'flow_index': flow_index_stats,
+                'trace_stats': dict(stats),
+                'output_files': {
+                    'all': str(all_path),
+                    'strict': str(strict_path),
+                    'partial_or_strict': str(matched_path),
+                },
+            }
+        )
+        write_summary_json(summary_path, summary)
+    else:
+        summary.update(
+            {
+                'trace_flow_match_strict_jsonl': str(strict_path),
+                'traces_total': int(stats['traces_total']),
+                'traces_strict_match': int(stats['traces_strict_match']),
+            }
+        )
     return summary

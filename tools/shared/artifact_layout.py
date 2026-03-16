@@ -59,11 +59,7 @@ class DatasetExportPaths(PathBundle):
     _required_fields: ClassVar[tuple[str, ...]] = (
         'normalized_slices_dir',
         'csv_path',
-        'dedup_dropped_csv',
-        'token_counts_csv',
-        'token_distribution_png',
         'split_manifest_json',
-        'summary_json',
     )
 
 
@@ -77,8 +73,8 @@ class PairTracePaths(PathBundle):
 
     _required_fields: ClassVar[tuple[str, ...]] = (
         'pairs_jsonl',
+        'leftover_counterparts_jsonl',
         'paired_signatures_dir',
-        'summary_json',
     )
 
 
@@ -102,10 +98,7 @@ class SliceStagePaths(PathBundle):
     slice_dir: Path
     summary_json: Path
 
-    _required_fields: ClassVar[tuple[str, ...]] = (
-        'slice_dir',
-        'summary_json',
-    )
+    _required_fields: ClassVar[tuple[str, ...]] = ('slice_dir',)
 
 
 def build_dataset_export_paths(

@@ -584,6 +584,22 @@ FLOW_NUM_SUFFIX = {
 }
 
 
+def build_function_flow_map_from_manifest_comments(input_xml: Path) -> dict[str, str]:
+    root = ET.parse(input_xml).getroot()
+    mapping: dict[str, str] = {}
+    for elem in root.iter():
+        if elem.tag not in TARGET_TAGS:
+            continue
+        function_name = (elem.attrib.get('function') or '').strip()
+        if not function_name:
+            continue
+        simple_name = split_simple_name(function_name)
+        flow = FAMILY_TO_FLOW.get(classify_flow_family(simple_name))
+        if flow:
+            mapping[function_name] = flow
+    return mapping
+
+
 def load_function_flow_map(categorized_jsonl: Path) -> dict[str, str]:
     mapping: dict[str, str] = {}
     with categorized_jsonl.open('r', encoding='utf-8') as f:
@@ -634,20 +650,15 @@ def _flow_sort_key(flow_type: str) -> tuple[int, int, str]:
     return (10**9, 10**9, flow_type)
 
 
-def add_flow_tags_to_testcase(
+def _add_flow_tags_to_tree(
     *,
+    tree: ET.ElementTree,
     input_xml: Path,
-    function_categories_jsonl: Path,
+    fn_to_flow: dict[str, str],
     output_xml: Path,
-    summary_json: Path,
+    summary_json: Path | None = None,
+    function_categories_jsonl: Path | None = None,
 ) -> dict[str, object]:
-    if not input_xml.exists():
-        raise FileNotFoundError(f'Input XML not found: {input_xml}')
-    if not function_categories_jsonl.exists():
-        raise FileNotFoundError(f'Function categories JSONL not found: {function_categories_jsonl}')
-
-    fn_to_flow = load_function_flow_map(function_categories_jsonl)
-    tree = ET.parse(input_xml)
     root = tree.getroot()
 
     per_flow_counts = Counter()
@@ -723,7 +734,6 @@ def add_flow_tags_to_testcase(
 
     summary = {
         'input_xml': str(input_xml),
-        'function_categories_jsonl': str(function_categories_jsonl),
         'output_xml': str(output_xml),
         'testcases': testcase_count,
         'flow_tag_item_counts': dict(
@@ -733,12 +743,65 @@ def add_flow_tags_to_testcase(
         'unresolved_comment_records': unresolved_comment,
         'unresolved_flaw_records': unresolved_flaw,
     }
-    write_summary_json(summary_json, summary, echo=False)
+    if function_categories_jsonl is not None:
+        summary['function_categories_jsonl'] = str(function_categories_jsonl)
+    if summary_json is not None:
+        write_summary_json(summary_json, summary, echo=False)
     return summary
 
 
-def run_stage02b_flow(*, input_xml: Path, source_root: Path, output_dir: Path) -> dict[str, object]:
+def add_flow_tags_to_testcase(
+    *,
+    input_xml: Path,
+    function_categories_jsonl: Path,
+    output_xml: Path,
+    summary_json: Path,
+) -> dict[str, object]:
+    if not input_xml.exists():
+        raise FileNotFoundError(f'Input XML not found: {input_xml}')
+    if not function_categories_jsonl.exists():
+        raise FileNotFoundError(f'Function categories JSONL not found: {function_categories_jsonl}')
+
+    return _add_flow_tags_to_tree(
+        tree=ET.parse(input_xml),
+        input_xml=input_xml,
+        fn_to_flow=load_function_flow_map(function_categories_jsonl),
+        output_xml=output_xml,
+        summary_json=summary_json,
+        function_categories_jsonl=function_categories_jsonl,
+    )
+
+
+def build_minimal_flow_manifest(*, input_xml: Path, output_xml: Path) -> dict[str, object]:
+    if not input_xml.exists():
+        raise FileNotFoundError(f'Input XML not found: {input_xml}')
+    return _add_flow_tags_to_tree(
+        tree=ET.parse(input_xml),
+        input_xml=input_xml,
+        fn_to_flow=build_function_flow_map_from_manifest_comments(input_xml),
+        output_xml=output_xml,
+    )
+
+
+def run_stage02b_flow(
+    *,
+    input_xml: Path,
+    source_root: Path,
+    output_dir: Path,
+    minimal_outputs: bool = False,
+) -> dict[str, object]:
     output_paths = build_stage02b_output_paths(output_dir)
+
+    if minimal_outputs:
+        partition_result = build_minimal_flow_manifest(
+            input_xml=input_xml,
+            output_xml=output_paths.manifest_with_testcase_flows_xml,
+        )
+        return {
+            'output_dir': str(output_paths.output_dir),
+            'manifest_with_testcase_flows_xml': str(output_paths.manifest_with_testcase_flows_xml),
+            'partition_result': partition_result,
+        }
 
     extract_result = extract_function_inventory(
         input_xml=input_xml,
