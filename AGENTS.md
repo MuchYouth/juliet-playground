@@ -4,11 +4,11 @@ This repository runs Infer on the Juliet C/C++ test suite and maintains the pipe
 
 ## Start Here
 - Read `README.md` for local setup and common commands.
-- Use `docs/pipeline-runbook.md` for pipeline behavior, `docs/artifacts.md` for output layout, and `docs/rerun.md` for rerun workflows.
-- For stage-specific logic, open the matching `experiments/*/README.md` before editing that stage.
+- Use `docs/pipeline-runbook.md` for pipeline behavior, `docs/artifacts.md` for output layout, `docs/rerun.md` for rerun workflows, and `docs/stage-contracts.md` for the current code-based stage contracts.
+- For stage-specific logic, use `experiments/*/README.md` mainly for stages 01/02a/02b/04; for stages 03/05/06/07/07b, prefer `docs/stage-contracts.md` and the matching `tools/stage/*.py`.
 
 ## Repository Map
-- `tools/`: user-facing CLI scripts such as `run_pipeline.py`, `run-infer-all-juliet.py`, and rerun/export helpers.
+- `tools/`: user-facing CLI scripts such as `run_pipeline.py` and `compare-artifacts.py`.
 - `tools/stage/`: importable stage implementations for pipeline steps and rerun/export workflows.
 - `tools/shared/`: helper modules shared across stages and CLI entrypoints. Keep CLI wrappers thin and put reusable helper behavior here.
 - `tests/`: unit and regression tests. `tests/golden/` contains stage-level golden fixtures and fixture update tooling.

@@ -1,7 +1,7 @@
 # Artifacts reference
 
 산출물 구조, summary JSON, 로그/디버깅 포인트를 정리한 문서입니다.
-운영 전반은 [`pipeline-runbook.md`](pipeline-runbook.md), 재실행/운영 주의사항은 [`rerun.md`](rerun.md)를 참고하세요.
+운영 전반은 [`pipeline-runbook.md`](pipeline-runbook.md), 재실행/운영 주의사항은 [`rerun.md`](rerun.md), 현재 단계 계약은 [`stage-contracts.md`](stage-contracts.md)를 참고하세요.
 
 ## 단일 Infer / Signature 산출물
 
@@ -66,7 +66,12 @@ artifacts/pipeline-runs/run-YYYY.MM.DD-HH:MM:SS/
 ├── 03_infer-results/
 │   └── infer-YYYY.MM.DD-HH:MM:SS/
 ├── 03_signatures/
-│   └── infer-YYYY.MM.DD-HH:MM:SS/signature-YYYY.MM.DD-HH:MM:SS/non_empty/
+│   └── infer-YYYY.MM.DD-HH:MM:SS/
+│       └── signature-YYYY.MM.DD-HH:MM:SS/
+│           ├── non_empty/
+│           │   ├── CWE.../*.json
+│           │   └── analysis/signature_counts.csv
+│           └── flow_matched/
 ├── 03_infer_summary.json
 ├── 04_trace_flow/
 │   ├── trace_flow_match_all.jsonl
@@ -107,7 +112,9 @@ artifacts/pipeline-runs/run-YYYY.MM.DD-HH:MM:SS/
 │   ├── 01_manifest_comment_scan.stderr.log
 │   ├── ...
 │   ├── 07_dataset_export.stdout.log
-│   └── 07_dataset_export.stderr.log
+│   ├── 07_dataset_export.stderr.log
+│   ├── 07b_train_patched_counterparts_export.stdout.log
+│   └── 07b_train_patched_counterparts_export.stderr.log
 └── run_summary.json
 ```
 
@@ -127,7 +134,8 @@ artifacts/pipeline-runs/run-YYYY.MM.DD-HH:MM:SS/
 - `07_dataset_export/train_patched_counterparts_summary.json`
   - patched counterpart export의 dedup/token/split 결과를 포함
 - `logs/<step>.stdout.log`, `logs/<step>.stderr.log`
-  - 외부 스크립트 실행 로그와 내부 Step 07 stdout/stderr 캡처
+  - 외부 스크립트 실행 로그와 내부 stage stdout/stderr 캡처
+  - 예: `07_dataset_export.*`, `07b_train_patched_counterparts_export.*`
 
 ## 디버깅 팁
 
@@ -141,4 +149,5 @@ artifacts/pipeline-runs/run-YYYY.MM.DD-HH:MM:SS/
   - `05_pair_trace_ds/summary.json`
   - `07_dataset_export/summary.json`
   - `07_dataset_export/train_patched_counterparts_summary.json`
-- 개별 experiment를 직접 실행할 때는 각 `experiments/*/README.md`를 따르세요.
+- 개별 experiment 문서는 주로 01/02a/02b/04 보조 스크립트 기준입니다.
+- 현재 코드 기준 단계 계약은 `docs/stage-contracts.md`와 `tools/stage/*.py`를 우선해서 봅니다.

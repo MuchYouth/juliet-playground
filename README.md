@@ -11,15 +11,20 @@ paired trace → slice → dataset export까지 이어지는 실험 저장소입
   [`docs/artifacts.md`](docs/artifacts.md)
 - 재실행 / `--overwrite` / 경로 이식 / 재현성 옵션:
   [`docs/rerun.md`](docs/rerun.md)
-- Step 01 (`manifest -> with_comments`):
+- 현재 구현 단계 계약 / 테스트 기준 (`tools/run_pipeline.py` 기준):
+  [`docs/stage-contracts.md`](docs/stage-contracts.md)
+- Step 01 실험 메모 (`manifest -> with_comments`):
   [`experiments/epic001_manifest_comment_scan/README.md`](experiments/epic001_manifest_comment_scan/README.md)
-- Step 02a (`with_comments -> taint config`):
+- Step 02a 실험 메모 (`with_comments -> taint config`):
   [`experiments/epic001a_code_field_inventory/README.md`](experiments/epic001a_code_field_inventory/README.md)
-- Step 02b (`function inventory / flow xml`):
+- Step 02b 실험 메모 (`function inventory / flow xml`):
   [`experiments/epic001b_function_inventory/README.md`](experiments/epic001b_function_inventory/README.md),
   [`experiments/epic001c_testcase_flow_partition/README.md`](experiments/epic001c_testcase_flow_partition/README.md)
-- Step 04 (`trace flow filter`):
+- Step 04 실험 메모 (`trace flow filter`):
   [`experiments/epic001d_trace_flow_filter/README.md`](experiments/epic001d_trace_flow_filter/README.md)
+
+현재 구현 기준으로는 Stage 03 / 05 / 06 / 07 / 07b 동작을 `docs/stage-contracts.md`와
+`tools/stage/` 코드에서 확인하는 것이 가장 정확합니다.
 
 ## 코드 구조 원칙
 
@@ -168,6 +173,11 @@ python tools/run_pipeline.py stage07 \
 python tools/run_pipeline.py stage07b \
   --run-dir "$RUN_DIR" \
   --overwrite
+
+# 두 pipeline run 또는 dataset export 디렉터리 비교
+python tools/compare-artifacts.py \
+  artifacts/pipeline-runs/run-before \
+  artifacts/pipeline-runs/run-after
 ```
 
 추가 명령 예시와 재실행 패턴은 [`docs/rerun.md`](docs/rerun.md)에 정리되어 있습니다.

@@ -9,18 +9,26 @@
   [`artifacts.md`](artifacts.md)
 - 재실행 / `--overwrite` / 경로 이식 / 재현성 옵션:
   [`rerun.md`](rerun.md)
-- 단계별 세부 규칙:
+- 현재 구현 단계 계약 / 테스트 기준 (`tools/run_pipeline.py` 기준):
+  [`stage-contracts.md`](stage-contracts.md)
+- 실험 단계 메모(주로 01/02a/02b/04):
   `experiments/*/README.md`
 
 ## 주요 스크립트와 역할
 
 - `tools/run_pipeline.py`
   - 전체 파이프라인과 stage별 실행을 한 곳에서 담당하는 기본 entrypoint
-  - 대표 subcommand: `full`, `stage03`, `stage03-signature`, `stage05`, `stage06`, `stage07`, `stage07b`
-  - `tools/stage/stage03_infer.py`, `stage05_pair_trace.py`, `stage06_slices.py`, `stage07b_patched_export.py`는 standalone CLI가 아니라 이 entrypoint가 호출하는 내부 모듈입니다.
+  - 현재 subcommand: `full`, `stage01`, `stage02a`, `stage02b`, `stage03`, `stage03-signature`, `stage04`, `stage05`, `stage06`, `stage07`, `stage07b`
+- `tools/stage/*.py`
+  - `run_pipeline.py`가 호출하는 importable stage 구현
+  - 현재 동작의 source of truth는 CLI help와 이 모듈들, 그리고 [`stage-contracts.md`](stage-contracts.md)입니다.
+- `tools/compare-artifacts.py`
+  - pipeline run 디렉터리 또는 dataset export 디렉터리의 before/after 차이를 요약 비교하는 CLI
 
 ## 빠른 이동
 
+- 현재 단계 계약:
+  [`stage-contracts.md`](stage-contracts.md)
 - 단일 Infer / Signature 결과 구조:
   [`artifacts.md`](artifacts.md) → `단일 Infer / Signature 산출물`
 - 파이프라인 run 디렉터리 구조:
@@ -35,4 +43,6 @@
 ## 참고
 
 - 루트 `README.md`는 입문용 문서입니다.
+- 현재 코드 기준 단계 계약은 `stage-contracts.md`를 우선해서 봅니다.
+- `experiments/*/README.md`는 주로 01/02a/02b/04의 실험/보조 스크립트 문맥을 설명합니다.
 - 세부 산출물/운영 절차는 이 문서가 아니라 `artifacts.md`, `rerun.md`를 기준으로 봅니다.
