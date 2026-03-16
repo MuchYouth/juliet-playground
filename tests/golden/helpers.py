@@ -9,6 +9,7 @@ import shutil
 import sys
 import types
 import xml.etree.ElementTree as ET
+from collections import Counter
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Any, Iterator
@@ -297,6 +298,127 @@ def normalized_file_text(path: Path, root_aliases: list[tuple[Path, str]]) -> st
     if path.suffix == '.xml':
         return _load_normalized_xml(path, root_aliases)
     return _load_normalized_text(path, root_aliases)
+
+
+def normalized_json_value(path: Path, root_aliases: list[tuple[Path, str]]) -> Any:
+    payload = json.loads(path.read_text(encoding='utf-8'))
+    return _normalize_json_value(payload, root_aliases)
+
+
+def normalized_jsonl_rows(path: Path, root_aliases: list[tuple[Path, str]]) -> list[Any]:
+    rows: list[Any] = []
+    for line in path.read_text(encoding='utf-8').splitlines():
+        if not line.strip():
+            continue
+        rows.append(_normalize_json_value(json.loads(line), root_aliases))
+    return rows
+
+
+def assert_selected_json_keys_match(
+    *,
+    expected_path: Path,
+    actual_path: Path,
+    keys: list[str],
+    root_aliases: list[tuple[Path, str]],
+) -> None:
+    expected = normalized_json_value(expected_path, root_aliases)
+    actual = normalized_json_value(actual_path, root_aliases)
+    assert isinstance(expected, dict), f'Expected JSON object at {expected_path}'
+    assert isinstance(actual, dict), f'Expected JSON object at {actual_path}'
+    assert {key: expected.get(key) for key in keys} == {key: actual.get(key) for key in keys}, (
+        f'Selected JSON keys mismatch for {actual_path}'
+    )
+
+
+def assert_unordered_jsonl_matches(
+    *,
+    expected_path: Path,
+    actual_path: Path,
+    root_aliases: list[tuple[Path, str]],
+) -> None:
+    expected_rows = normalized_jsonl_rows(expected_path, root_aliases)
+    actual_rows = normalized_jsonl_rows(actual_path, root_aliases)
+    expected_serialized = sorted(
+        json.dumps(row, ensure_ascii=False, sort_keys=True) for row in expected_rows
+    )
+    actual_serialized = sorted(
+        json.dumps(row, ensure_ascii=False, sort_keys=True) for row in actual_rows
+    )
+    assert actual_serialized == expected_serialized, (
+        f'Unordered JSONL mismatch for {actual_path}.\n'
+        f'Expected rows: {len(expected_serialized)}\nActual rows: {len(actual_serialized)}'
+    )
+
+
+def _canonical_flow_xml(
+    path: Path, root_aliases: list[tuple[Path, str]]
+) -> dict[tuple[str, ...], dict[str, set[tuple[str, str, str, str, str]]]]:
+    root = ET.parse(path).getroot()
+    canonical: dict[tuple[str, ...], dict[str, set[tuple[str, str, str, str, str]]]] = {}
+
+    for testcase in root.findall('testcase'):
+        testcase_key = tuple(
+            sorted(
+                _normalize_path_string(file_elem.attrib.get('path', ''), root_aliases)
+                for file_elem in testcase.findall('file')
+            )
+        )
+        flow_map: dict[str, set[tuple[str, str, str, str, str]]] = {}
+        for flow_elem in testcase.findall('flow'):
+            flow_type = flow_elem.attrib.get('type', '')
+            if not flow_type:
+                continue
+            items: set[tuple[str, str, str, str, str]] = set()
+            for child in list(flow_elem):
+                items.add(
+                    (
+                        child.tag,
+                        _normalize_path_string(child.attrib.get('file', ''), root_aliases),
+                        str(child.attrib.get('line', '')),
+                        str(child.attrib.get('function', '')),
+                        str(child.attrib.get('inferred_function', '')),
+                    )
+                )
+            flow_map[flow_type] = items
+        canonical[testcase_key] = flow_map
+
+    return canonical
+
+
+def assert_flow_xml_contents_match(
+    *,
+    expected_path: Path,
+    actual_path: Path,
+    root_aliases: list[tuple[Path, str]],
+) -> None:
+    expected = _canonical_flow_xml(expected_path, root_aliases)
+    actual = _canonical_flow_xml(actual_path, root_aliases)
+    assert actual == expected, f'Flow XML content mismatch for {actual_path}'
+
+
+def directory_text_multiset(
+    root: Path,
+    root_aliases: list[tuple[Path, str]],
+    suffixes: set[str] | None = None,
+) -> Counter[str]:
+    contents: Counter[str] = Counter()
+    for path in sorted(p for p in root.rglob('*') if p.is_file()):
+        if suffixes is not None and path.suffix not in suffixes:
+            continue
+        contents[normalized_file_text(path, root_aliases)] += 1
+    return contents
+
+
+def assert_directory_text_multiset_matches(
+    *,
+    expected_dir: Path,
+    actual_dir: Path,
+    root_aliases: list[tuple[Path, str]],
+    suffixes: set[str] | None = None,
+) -> None:
+    expected = directory_text_multiset(expected_dir, root_aliases, suffixes=suffixes)
+    actual = directory_text_multiset(actual_dir, root_aliases, suffixes=suffixes)
+    assert actual == expected, f'Directory content multiset mismatch for {actual_dir}'
 
 
 def assert_directory_matches(
