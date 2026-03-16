@@ -4,6 +4,7 @@ from pathlib import Path
 from typing import Any
 
 from shared.paths import PROJECT_HOME
+from shared.traces import extract_std_bug_trace
 
 CPP_LIKE_SUFFIXES = {'.cpp', '.cc', '.cxx', '.c++', '.hpp', '.hh', '.hxx'}
 PROJECT_HOME_PATH = Path(PROJECT_HOME).resolve()
@@ -21,21 +22,6 @@ def normalize_artifact_path(path: Path | str) -> str:
         return str(resolved.relative_to(PROJECT_HOME_PATH))
     except ValueError:
         return str(resolved)
-
-
-def extract_std_bug_trace(bug_trace: Any) -> list[dict[str, Any]]:
-    if not isinstance(bug_trace, list) or not bug_trace:
-        return []
-    first = bug_trace[0]
-    if isinstance(first, dict):
-        return [node for node in bug_trace if isinstance(node, dict)]
-    if isinstance(first, list):
-        valid_lists = [sub for sub in bug_trace if isinstance(sub, list)]
-        if not valid_lists:
-            return []
-        selected = max(valid_lists, key=len)
-        return [node for node in selected if isinstance(node, dict)]
-    return []
 
 
 def load_tree_sitter_parsers() -> dict[str, object]:

@@ -7,6 +7,7 @@ import re
 import xml.etree.ElementTree as ET
 from pathlib import Path
 
+from shared.dataset_sources import load_tree_sitter_parsers
 from shared.juliet_manifest import build_manifest_source_index
 
 
@@ -36,25 +37,6 @@ FLAW_RE = re.compile(
 )
 FIX_RE = re.compile(r'^\s*/\*+\s*FIX\b', re.IGNORECASE)
 FILE_LANG = {'.c': 'c', '.cpp': 'cpp'}
-
-
-def load_parsers() -> dict[str, object]:
-    try:
-        from tree_sitter import Parser
-        from tree_sitter_languages import get_language
-    except Exception:
-        return {}
-
-    parsers: dict[str, object] = {}
-    for language_name in ('c', 'cpp'):
-        parser = Parser()
-        lang = get_language(language_name)
-        if hasattr(parser, 'set_language'):
-            parser.set_language(lang)
-        else:
-            parser.language = lang
-        parsers[language_name] = parser
-    return parsers
 
 
 def _extract_function_name_from_declarator(decl_node, source_bytes: bytes) -> str | None:
@@ -179,7 +161,7 @@ def scan_manifest_comments(
         suffixes=SOURCE_EXTS,
     )
 
-    parsers = load_parsers()
+    parsers = load_tree_sitter_parsers()
     tree = ET.parse(manifest)
     root = tree.getroot()
     stats = new_stats()

@@ -10,6 +10,7 @@ from collections import Counter
 from dataclasses import dataclass
 from pathlib import Path
 
+from shared.dataset_sources import load_tree_sitter_parsers
 from shared.juliet_manifest import build_manifest_source_index
 
 TARGET_COMMENT_TAGS = ('comment_flaw', 'comment_fix')
@@ -51,25 +52,6 @@ class ResolutionResult:
     candidate_count: int
     selected_kind: str
     selected_conditional: str
-
-
-def load_parsers() -> dict[str, object]:
-    try:
-        from tree_sitter import Parser
-        from tree_sitter_languages import get_language
-    except Exception:
-        return {}
-
-    parsers: dict[str, object] = {}
-    for language_name in ('c', 'cpp'):
-        parser = Parser()
-        lang = get_language(language_name)
-        if hasattr(parser, 'set_language'):
-            parser.set_language(lang)
-        else:
-            parser.language = lang
-        parsers[language_name] = parser
-    return parsers
 
 
 def _node_first_line_text(node, source_bytes: bytes) -> str:
@@ -454,7 +436,7 @@ def extract_unique_code_fields(
     if not source_root.exists():
         raise FileNotFoundError(f'Source root not found: {source_root}')
 
-    parsers = load_parsers()
+    parsers = load_tree_sitter_parsers()
     source_index = build_manifest_source_index(
         manifest_xml=input_xml,
         source_root=source_root,
