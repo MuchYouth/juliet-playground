@@ -27,13 +27,7 @@ def test_primary_dataset_export_uses_shared_step07_core(tmp_path, monkeypatch):
     def fake_core(**kwargs):
         captured.update(kwargs)
         return {
-            'csv_path': kwargs['csv_path'],
-            'dedup_dropped_csv': kwargs['dedup_dropped_csv'],
-            'normalized_slices_dir': kwargs['normalized_slices_dir'],
-            'token_counts_csv': kwargs['token_counts_csv'],
-            'token_distribution_png': kwargs['token_distribution_png'],
-            'split_manifest_json': kwargs['split_manifest_json'],
-            'summary_json': kwargs['summary_json'],
+            'dataset': kwargs['export_paths'].to_payload(),
             'counts': {},
         }
 
@@ -49,7 +43,7 @@ def test_primary_dataset_export_uses_shared_step07_core(tmp_path, monkeypatch):
         dedup_mode='row',
     )
 
-    assert result['real_vul_data_csv'].endswith('Real_Vul_data.csv')
+    assert result['dataset']['csv_path'].endswith('Real_Vul_data.csv')
     split_assignments = captured['split_assignments_fn'](['pair-a', 'pair-b'])
     assert split_assignments.keys() == {'pair-a', 'pair-b'}
     assert set(split_assignments.values()) == {'train_val', 'test'}
@@ -77,13 +71,7 @@ def test_patched_counterparts_uses_shared_step07_core(tmp_path, monkeypatch):
     def fake_core(**kwargs):
         captured.update(kwargs)
         return {
-            'csv_path': kwargs['csv_path'],
-            'dedup_dropped_csv': kwargs['dedup_dropped_csv'],
-            'normalized_slices_dir': kwargs['normalized_slices_dir'],
-            'token_counts_csv': kwargs['token_counts_csv'],
-            'token_distribution_png': kwargs['token_distribution_png'],
-            'split_manifest_json': kwargs['split_manifest_json'],
-            'summary_json': kwargs['summary_json'],
+            'dataset': kwargs['export_paths'].to_payload(),
             'counts': {'pairs_total': 2},
         }
 
@@ -98,7 +86,7 @@ def test_patched_counterparts_uses_shared_step07_core(tmp_path, monkeypatch):
         dedup_mode='none',
     )
 
-    assert result['csv_path'].name == 'train_patched_counterparts.csv'
+    assert result.csv_path.name == 'train_patched_counterparts.csv'
     assert captured['split_assignments_fn'](['pair-a', 'pair-b']) == {
         'pair-a': 'train_val',
         'pair-b': 'train_val',

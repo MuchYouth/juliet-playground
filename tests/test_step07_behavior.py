@@ -187,7 +187,7 @@ def test_export_dataset_from_pipeline_writes_split_and_dedup_outputs(tmp_path, m
             dedup_mode='row',
         )
 
-    assert Path(result['summary_json']).exists()
+    assert Path(result['dataset']['summary_json']).exists()
 
     summary = json.loads((output_dir / 'summary.json').read_text(encoding='utf-8'))
     assert summary['counts']['pairs_total'] == 4

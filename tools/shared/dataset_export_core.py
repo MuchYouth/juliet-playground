@@ -5,7 +5,7 @@ from collections import Counter
 from pathlib import Path
 from typing import Any, Callable
 
-from shared.artifact_layout import build_dataset_export_paths
+from shared.artifact_layout import DatasetExportPaths
 from shared.csvio import write_csv_rows
 from shared.dataset_dedup import ROLE_SORT_ORDER, dedupe_pairs_by_normalized_rows
 from shared.dataset_normalize import normalize_slice_function_names
@@ -17,9 +17,9 @@ from shared.dataset_sources import (
 from shared.jsonio import write_json
 
 
-def _prepare_export_outputs(*, csv_path: Path, normalized_slices_dir: Path) -> None:
-    csv_path.parent.mkdir(parents=True, exist_ok=True)
-    normalized_slices_dir.mkdir(parents=True, exist_ok=True)
+def _prepare_export_outputs(*, export_paths: DatasetExportPaths) -> None:
+    export_paths.csv_path.parent.mkdir(parents=True, exist_ok=True)
+    export_paths.normalized_slices_dir.mkdir(parents=True, exist_ok=True)
 
 
 def run_step07_export_wrapper(
@@ -27,9 +27,8 @@ def run_step07_export_wrapper(
     pairs: list[dict[str, Any]],
     paired_signatures_dir: Path,
     slice_dir: Path,
-    output_dir: Path,
+    export_paths: DatasetExportPaths,
     dedup_mode: str,
-    dataset_basename: str | None,
     split_assignments_fn: Callable[[list[str]], dict[str, str]],
     summary_metadata: dict[str, Any],
     split_manifest_metadata: dict[str, Any],
@@ -48,13 +47,17 @@ def run_step07_export_wrapper(
     if dedup_mode not in {'none', 'row'}:
         raise ValueError(f'Unsupported dedup_mode: {dedup_mode}')
 
-    output_dir.mkdir(parents=True, exist_ok=True)
-    export_paths = build_dataset_export_paths(
-        output_dir=output_dir,
-        dataset_basename=dataset_basename,
-    )
+    export_paths.output_dir.mkdir(parents=True, exist_ok=True)
     if prepare_target_fn is not None:
-        for target in export_paths.values():
+        for target in (
+            export_paths.csv_path,
+            export_paths.dedup_dropped_csv,
+            export_paths.normalized_slices_dir,
+            export_paths.token_counts_csv,
+            export_paths.token_distribution_png,
+            export_paths.split_manifest_json,
+            export_paths.summary_json,
+        ):
             prepare_target_fn(target, overwrite)
 
     if run_step07_export_core_fn is None:
@@ -64,13 +67,7 @@ def run_step07_export_wrapper(
         pairs=pairs,
         paired_signatures_dir=paired_signatures_dir,
         slice_dir=slice_dir,
-        csv_path=export_paths['csv_path'],
-        dedup_dropped_csv=export_paths['dedup_dropped_csv'],
-        normalized_slices_dir=export_paths['normalized_slices_dir'],
-        token_counts_csv=export_paths['token_counts_csv'],
-        token_distribution_png=export_paths['token_distribution_png'],
-        split_manifest_json=export_paths['split_manifest_json'],
-        summary_json=export_paths['summary_json'],
+        export_paths=export_paths,
         dedup_mode=dedup_mode,
         split_assignments_fn=split_assignments_fn,
         summary_metadata=summary_metadata,
@@ -78,6 +75,42 @@ def run_step07_export_wrapper(
         collect_defined_function_names_fn=collect_defined_function_names_fn,
         build_source_file_candidates_fn=build_source_file_candidates_fn,
     )
+
+
+def run_configured_step07_export(
+    *,
+    pairs: list[dict[str, Any]],
+    paired_signatures_dir: Path,
+    slice_dir: Path,
+    export_paths: DatasetExportPaths,
+    dedup_mode: str,
+    split_assignments_fn: Callable[[list[str]], dict[str, str]],
+    summary_metadata: dict[str, Any],
+    split_manifest_metadata: dict[str, Any],
+    collect_defined_function_names_fn: Callable[
+        [Path, dict[str, object]], tuple[set[str], str | None]
+    ],
+    build_source_file_candidates_fn: Callable[[dict[str, Any], str | None], list[Path]],
+    run_step07_export_core_fn: Callable[..., dict[str, Any]],
+    prepare_target_fn: Callable[[Path, bool], None] | None = None,
+    overwrite: bool = False,
+) -> tuple[dict[str, Any], DatasetExportPaths]:
+    export_result = run_step07_export_wrapper(
+        pairs=pairs,
+        paired_signatures_dir=paired_signatures_dir,
+        slice_dir=slice_dir,
+        export_paths=export_paths,
+        dedup_mode=dedup_mode,
+        split_assignments_fn=split_assignments_fn,
+        summary_metadata=summary_metadata,
+        split_manifest_metadata=split_manifest_metadata,
+        collect_defined_function_names_fn=collect_defined_function_names_fn,
+        build_source_file_candidates_fn=build_source_file_candidates_fn,
+        run_step07_export_core_fn=run_step07_export_core_fn,
+        prepare_target_fn=prepare_target_fn,
+        overwrite=overwrite,
+    )
+    return export_result, export_paths
 
 
 def _build_role_specs(pair: dict[str, Any]) -> list[dict[str, Any]]:
@@ -659,13 +692,7 @@ def run_step07_export_core(
     pairs: list[dict[str, Any]],
     paired_signatures_dir: Path,
     slice_dir: Path,
-    csv_path: Path,
-    dedup_dropped_csv: Path,
-    normalized_slices_dir: Path,
-    token_counts_csv: Path,
-    token_distribution_png: Path,
-    split_manifest_json: Path,
-    summary_json: Path,
+    export_paths: DatasetExportPaths,
     dedup_mode: str,
     split_assignments_fn: Callable[[list[str]], dict[str, str]],
     summary_metadata: dict[str, Any],
@@ -683,7 +710,7 @@ def run_step07_export_core(
         plot_distribution,
     )
 
-    _prepare_export_outputs(csv_path=csv_path, normalized_slices_dir=normalized_slices_dir)
+    _prepare_export_outputs(export_paths=export_paths)
 
     print('Loading tokenizer for normalized slices...')
     tokenizer = load_tokenizer('microsoft/codebert-base')
@@ -720,23 +747,23 @@ def run_step07_export_core(
     token_count_rows, ordered_rows, pair_ids_by_dataset_type = _write_export_artifacts(
         surviving_pairs=surviving_pairs,
         split_assignments_fn=split_assignments_fn,
-        csv_path=csv_path,
-        normalized_slices_dir=normalized_slices_dir,
-        token_counts_csv=token_counts_csv,
-        token_distribution_png=token_distribution_png,
+        csv_path=export_paths.csv_path,
+        normalized_slices_dir=export_paths.normalized_slices_dir,
+        token_counts_csv=export_paths.token_counts_csv,
+        token_distribution_png=export_paths.token_distribution_png,
         dedup_audit_rows=dedup_audit_rows,
-        dedup_dropped_csv=dedup_dropped_csv,
+        dedup_dropped_csv=export_paths.dedup_dropped_csv,
         plot_distribution_fn=plot_distribution,
     )
 
     split_manifest, summary_payload = _build_export_summary(
         summary_metadata=summary_metadata,
         split_manifest_metadata=split_manifest_metadata,
-        normalized_slices_dir=normalized_slices_dir,
-        dedup_dropped_csv=dedup_dropped_csv,
-        split_manifest_json=split_manifest_json,
-        token_counts_csv=token_counts_csv,
-        token_distribution_png=token_distribution_png,
+        normalized_slices_dir=export_paths.normalized_slices_dir,
+        dedup_dropped_csv=export_paths.dedup_dropped_csv,
+        split_manifest_json=export_paths.split_manifest_json,
+        token_counts_csv=export_paths.token_counts_csv,
+        token_distribution_png=export_paths.token_distribution_png,
         dedup_summary=dedup_summary,
         filtered_pair_reasons=filtered_pair_reasons,
         counts=counts,
@@ -752,17 +779,11 @@ def run_step07_export_core(
         max_length=MAX_LENGTH,
         content_token_limit=CONTENT_TOKEN_LIMIT,
     )
-    write_json(split_manifest_json, split_manifest)
-    write_json(summary_json, summary_payload)
+    write_json(export_paths.split_manifest_json, split_manifest)
+    write_json(export_paths.summary_json, summary_payload)
     print(json.dumps(summary_payload, ensure_ascii=False))
 
     return {
-        'csv_path': csv_path,
-        'dedup_dropped_csv': dedup_dropped_csv,
-        'normalized_slices_dir': normalized_slices_dir,
-        'token_counts_csv': token_counts_csv,
-        'token_distribution_png': token_distribution_png,
-        'split_manifest_json': split_manifest_json,
-        'summary_json': summary_json,
+        'dataset': export_paths.to_payload(),
         'counts': dict(counts),
     }

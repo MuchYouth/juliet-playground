@@ -146,12 +146,12 @@ def build_paired_trace_dataset(
     prepare_output_dir(output_dir, overwrite)
 
     pair_trace_paths = build_pair_trace_paths(output_dir)
-    paired_signatures_dir = pair_trace_paths['paired_signatures_dir']
+    paired_signatures_dir = pair_trace_paths.paired_signatures_dir
     paired_signatures_dir.mkdir(parents=True, exist_ok=True)
 
-    pairs_jsonl = pair_trace_paths['pairs_jsonl']
-    leftovers_jsonl = pair_trace_paths['leftover_counterparts_jsonl']
-    summary_json = pair_trace_paths['summary_json']
+    pairs_jsonl = pair_trace_paths.pairs_jsonl
+    leftovers_jsonl = pair_trace_paths.leftover_counterparts_jsonl
+    summary_json = pair_trace_paths.summary_json
 
     strict_records = load_strict_records(trace_jsonl)
     grouped = group_by_testcase(strict_records)

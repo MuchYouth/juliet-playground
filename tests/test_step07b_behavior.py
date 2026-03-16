@@ -99,8 +99,8 @@ def test_build_train_patched_counterparts_tracks_selection_and_skip_reasons(tmp_
         overwrite=False,
     )
 
-    assert len(result['pairs']) == 1
-    selected = result['pairs'][0]
+    assert len(result.pairs) == 1
+    selected = result.pairs[0]
     assert selected['testcase_key'] == 'CASE1'
     assert selected['source_primary_pair_id'] == 'primary-1'
     assert selected['selection_reason'] == 'top_leftover_train_val'
@@ -206,7 +206,7 @@ def test_build_train_patched_counterparts_pair_id_is_stable_across_run_roots(tmp
             selection_summary_json=selection_summary_json,
             overwrite=False,
         )
-        return result['pairs'][0]['pair_id']
+        return result.pairs[0]['pair_id']
 
     assert build_selection(tmp_path / 'root_a') == build_selection(tmp_path / 'root_b')
 
@@ -249,13 +249,16 @@ def test_export_patched_dataset_runs_selection_slice_and_export(tmp_path, monkey
 
     def fake_build_train_patched_counterparts(**kwargs):
         captured['build_args'] = kwargs
-        return {
-            'pairs': [{'pair_id': 'p1', 'testcase_key': 'CASE1'}],
-            'output_pairs_jsonl': Path(kwargs['output_pairs_jsonl']),
-            'selection_summary_json': Path(kwargs['selection_summary_json']),
-            'signature_output_dir': Path(kwargs['signature_output_dir']),
-            'selection_counts': {},
-        }
+        return module.PatchedPairingSelectionResult(
+            pairs=[{'pair_id': 'p1', 'testcase_key': 'CASE1'}],
+            pairing=module.PatchedPairingPaths(
+                output_dir=Path(kwargs['pair_dir']),
+                pairs_jsonl=Path(kwargs['output_pairs_jsonl']),
+                signatures_dir=Path(kwargs['signature_output_dir']),
+                selection_summary_json=Path(kwargs['selection_summary_json']),
+            ),
+            selection_counts={},
+        )
 
     def fake_generate_slices(**kwargs):
         captured['slice_args'] = kwargs
@@ -277,15 +280,7 @@ def test_export_patched_dataset_runs_selection_slice_and_export(tmp_path, monkey
     def fake_export_dataset(**kwargs):
         captured['export_args'] = kwargs
         out = kwargs['dataset_export_dir']
-        return {
-            'csv_path': out / 'train_patched_counterparts.csv',
-            'dedup_dropped_csv': out / 'train_patched_counterparts_dedup_dropped.csv',
-            'normalized_slices_dir': out / 'train_patched_counterparts_slices',
-            'token_counts_csv': out / 'train_patched_counterparts_token_counts.csv',
-            'token_distribution_png': out / 'train_patched_counterparts_token_distribution.png',
-            'split_manifest_json': out / 'train_patched_counterparts_split_manifest.json',
-            'summary_json': out / 'train_patched_counterparts_summary.json',
-        }
+        return module.build_dataset_export_paths(out, module.DATASET_BASENAME)
 
     monkeypatch.setattr(
         module, 'build_train_patched_counterparts', fake_build_train_patched_counterparts
@@ -317,10 +312,11 @@ def test_export_patched_dataset_runs_selection_slice_and_export(tmp_path, monkey
     assert captured['slice_args']['summary_metadata'] == {
         'dataset_basename': module.DATASET_BASENAME
     }
-    assert result['summary_json'] == str(
-        dataset_export_dir / 'train_patched_counterparts_summary.json'
+    assert (
+        result.dataset.summary_json
+        == dataset_export_dir / 'train_patched_counterparts_summary.json'
     )
-    assert result['slice_summary_json'] == str(tmp_path / 'slice-out' / 'summary.json')
+    assert result.slices.summary_json == tmp_path / 'slice-out' / 'summary.json'
 
 
 def test_resolve_paths_and_validate_args_use_explicit_inputs(tmp_path):
@@ -337,23 +333,13 @@ def test_resolve_paths_and_validate_args_use_explicit_inputs(tmp_path):
 
     paths = module.resolve_paths(run_dir=run_dir)
 
-    assert paths['run_dir'] == run_dir
-    assert paths['pair_dir'] == pair_dir
-    assert paths['dataset_export_dir'] == dataset_export_dir
-    assert paths['signature_output_dir'] == pair_dir / 'train_patched_counterparts_signatures'
-    assert paths['slice_output_dir'] == run_dir / '06_slices' / 'train_patched_counterparts'
+    assert paths.run_dir == run_dir
+    assert paths.pair_dir == pair_dir
+    assert paths.dataset_export_dir == dataset_export_dir
+    assert paths.signature_output_dir == pair_dir / 'train_patched_counterparts_signatures'
+    assert paths.slice_output_dir == run_dir / '06_slices' / 'train_patched_counterparts'
 
-    module.validate_args(
-        pair_dir=paths['pair_dir'],
-        dataset_export_dir=paths['dataset_export_dir'],
-        old_prefix='old',
-        new_prefix='new',
-    )
+    module.validate_args(paths, old_prefix='old', new_prefix='new')
 
     with pytest.raises(ValueError, match='--old-prefix and --new-prefix'):
-        module.validate_args(
-            pair_dir=paths['pair_dir'],
-            dataset_export_dir=paths['dataset_export_dir'],
-            old_prefix='old',
-            new_prefix=None,
-        )
+        module.validate_args(paths, old_prefix='old', new_prefix=None)
