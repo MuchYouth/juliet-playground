@@ -73,23 +73,10 @@ def test_stage07_dataset_export_contract(tmp_path, monkeypatch):
     assert len(normalized_slice_files) == len(rows)
 
     split_manifest = json.loads(split_manifest_path.read_text(encoding='utf-8'))
-    assert {
-        'counts',
-        'pair_ids',
-        'normalized_slices_dir',
-        'dedup_dropped_csv',
-    } <= set(split_manifest)
+    assert {'counts', 'pair_ids'} <= set(split_manifest)
     assert {'train_val', 'test'} <= set(split_manifest['pair_ids'])
 
     summary = json.loads(summary_path.read_text(encoding='utf-8'))
-    assert {
-        'normalized_slices_dir',
-        'dedup_dropped_csv',
-        'split_manifest_json',
-        'dedup',
-        'token_stats',
-        'filtered_pair_reasons',
-        'counts',
-    } <= set(summary)
+    assert {'dedup', 'token_stats', 'filtered_pair_reasons', 'counts'} <= set(summary)
     assert summary['counts']['train_val_pairs'] == len(split_manifest['pair_ids']['train_val'])
     assert summary['counts']['test_pairs'] == len(split_manifest['pair_ids']['test'])

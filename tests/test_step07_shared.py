@@ -47,8 +47,8 @@ def test_primary_dataset_export_uses_shared_step07_core(tmp_path, monkeypatch):
     split_assignments = captured['split_assignments_fn'](['pair-a', 'pair-b'])
     assert split_assignments.keys() == {'pair-a', 'pair-b'}
     assert set(split_assignments.values()) == {'train_val', 'test'}
-    assert captured['summary_metadata']['seed'] == 1234
-    assert captured['split_manifest_metadata']['split_unit'] == 'pair_id'
+    assert captured['summary_metadata'] == {}
+    assert captured['split_manifest_metadata'] == {}
 
 
 def test_patched_counterparts_uses_shared_step07_core(tmp_path, monkeypatch):
@@ -77,12 +77,12 @@ def test_patched_counterparts_uses_shared_step07_core(tmp_path, monkeypatch):
 
     monkeypatch.setattr(module, 'run_step07_export_core', fake_core)
 
+    dataset_paths = module.build_dataset_export_paths(tmp_path / 'out', module.DATASET_BASENAME)
     result = module.export_dataset(
         pairs=pairs,
         paired_signatures_dir=paired_signatures_dir,
         slice_dir=slice_dir,
-        dataset_export_dir=tmp_path / 'out',
-        overwrite=False,
+        dataset_paths=dataset_paths,
         dedup_mode='none',
     )
 
@@ -92,4 +92,4 @@ def test_patched_counterparts_uses_shared_step07_core(tmp_path, monkeypatch):
         'pair-b': 'train_val',
     }
     assert captured['summary_metadata']['dataset_basename'] == 'train_patched_counterparts'
-    assert captured['split_manifest_metadata']['split_mode'] == 'inherited_train_val_only'
+    assert captured['split_manifest_metadata'] == {}

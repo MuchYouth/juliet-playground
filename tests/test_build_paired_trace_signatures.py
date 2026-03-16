@@ -3,13 +3,13 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from tests.helpers import REPO_ROOT, load_module_from_path, run_module_main
+from tests.helpers import REPO_ROOT, load_module_from_path
 
 
 def test_stage05_cli_selects_longest_counterpart_and_records_leftover(tmp_path):
     module = load_module_from_path(
         'test_stage05_cli_module',
-        REPO_ROOT / 'tools/run_pipeline.py',
+        REPO_ROOT / 'tools/stage/stage05_pair_trace.py',
     )
 
     signatures_dir = tmp_path / 'signatures'
@@ -57,18 +57,9 @@ def test_stage05_cli_selects_longest_counterpart_and_records_leftover(tmp_path):
 
     output_dir = tmp_path / 'paired-output'
 
-    assert (
-        run_module_main(
-            module,
-            [
-                'stage05',
-                '--trace-jsonl',
-                str(trace_jsonl),
-                '--output-dir',
-                str(output_dir),
-            ],
-        )
-        == 0
+    module.build_paired_trace_dataset(
+        trace_jsonl=trace_jsonl,
+        output_dir=output_dir,
     )
 
     pairs = [

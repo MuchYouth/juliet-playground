@@ -301,45 +301,29 @@ def run_stage04(temp_root: Path) -> None:
 def run_stage05(temp_root: Path) -> None:
     module = load_module_from_path(
         'golden_stage05_pair_trace',
-        REPO_ROOT / 'tools/run_pipeline.py',
+        REPO_ROOT / 'tools/stage/stage05_pair_trace.py',
     )
     output_dir = temp_root / 'expected/05_pair_trace_ds'
     ensure_clean_dir(output_dir)
-    result = run_module_main(
-        module,
-        [
-            'stage05',
-            '--trace-jsonl',
-            str(temp_root / 'expected/04_trace_flow/trace_flow_match_strict.jsonl'),
-            '--output-dir',
-            str(output_dir),
-        ],
-        cwd=temp_root,
+    module.build_paired_trace_dataset(
+        trace_jsonl=temp_root / 'expected/04_trace_flow/trace_flow_match_strict.jsonl',
+        output_dir=output_dir,
+        run_dir=temp_root / 'expected',
     )
-    if result != 0:
-        raise RuntimeError(f'Stage 05 failed: {result}')
 
 
 def run_stage06(temp_root: Path) -> None:
     module = load_module_from_path(
         'golden_stage06_slices',
-        REPO_ROOT / 'tools/run_pipeline.py',
+        REPO_ROOT / 'tools/stage/stage06_slices.py',
     )
     output_dir = temp_root / 'expected/06_slices'
     ensure_clean_dir(output_dir)
-    result = run_module_main(
-        module,
-        [
-            'stage06',
-            '--signature-db-dir',
-            str(temp_root / 'expected/05_pair_trace_ds/paired_signatures'),
-            '--output-dir',
-            str(output_dir),
-        ],
-        cwd=temp_root,
+    module.generate_slices(
+        signature_db_dir=temp_root / 'expected/05_pair_trace_ds/paired_signatures',
+        output_dir=output_dir,
+        run_dir=temp_root / 'expected',
     )
-    if result != 0:
-        raise RuntimeError(f'Stage 06 failed: {result}')
 
 
 def run_stage07(temp_root: Path) -> None:
@@ -369,17 +353,13 @@ def run_stage07(temp_root: Path) -> None:
 def run_stage07b(temp_root: Path) -> None:
     module = load_module_from_path(
         'golden_stage07b_export',
-        REPO_ROOT / 'tools/run_pipeline.py',
+        REPO_ROOT / 'tools/stage/stage07b_patched_export.py',
     )
 
     pair_dir = temp_root / 'expected/05_pair_trace_ds'
-    slice_output_dir = temp_root / 'expected/06_slices/train_patched_counterparts'
-    dataset_export_dir = temp_root / 'expected/07b_dataset_export'
-    signature_output_dir = pair_dir / 'train_patched_counterparts_signatures'
-    output_pairs_jsonl = pair_dir / 'train_patched_counterparts_pairs.jsonl'
-    selection_summary_json = pair_dir / 'train_patched_counterparts_selection_summary.json'
-
-    ensure_clean_dir(dataset_export_dir)
+    dataset_export_dir = temp_root / 'expected/07_dataset_export'
+    stage07b_export_dir = temp_root / 'expected/07b_dataset_export'
+    ensure_clean_dir(stage07b_export_dir)
     selected_train_pair_ids: list[str] = []
     for line in (pair_dir / 'pairs.jsonl').read_text(encoding='utf-8').splitlines():
         if not line.strip():
@@ -387,13 +367,7 @@ def run_stage07b(temp_root: Path) -> None:
         obj = json.loads(line)
         if obj['testcase_key'] in PATCHED_SOURCE_TESTCASE_KEYS:
             selected_train_pair_ids.append(obj['pair_id'])
-
     split_manifest = {
-        'output_dir': 'expected/07b_dataset_export',
-        'split_unit': 'pair_id',
-        'train_ratio': 1.0,
-        'test_ratio': 0.0,
-        'seed': 1234,
         'counts': {
             'pairs_total': len(selected_train_pair_ids),
             'train_val': len(selected_train_pair_ids),
@@ -408,32 +382,24 @@ def run_stage07b(temp_root: Path) -> None:
         json.dumps(split_manifest, ensure_ascii=False, indent=2) + '\n',
         encoding='utf-8',
     )
-
     with deterministic_tokenizer_context():
-        result = run_module_main(
-            module,
-            [
-                'stage07b',
-                '--pair-dir',
-                str(pair_dir),
-                '--dataset-export-dir',
-                str(dataset_export_dir),
-                '--signature-output-dir',
-                str(signature_output_dir),
-                '--slice-output-dir',
-                str(slice_output_dir),
-                '--output-pairs-jsonl',
-                str(output_pairs_jsonl),
-                '--selection-summary-json',
-                str(selection_summary_json),
-                '--dedup-mode',
-                'row',
-                '--overwrite',
-            ],
-            cwd=temp_root,
+        result = module.export_patched_dataset(
+            module.PatchedDatasetExportParams(
+                run_dir=temp_root / 'expected',
+                dedup_mode='row',
+            )
         )
-    if result != 0:
-        raise RuntimeError(f'Stage 07b failed: {result}')
+    for path in [
+        result.dataset.csv_path,
+        result.dataset.dedup_dropped_csv,
+        result.dataset.normalized_slices_dir,
+        result.dataset.token_counts_csv,
+        result.dataset.token_distribution_png,
+        result.dataset.split_manifest_json,
+        result.dataset.summary_json,
+    ]:
+        destination = stage07b_export_dir / path.name
+        sync_path(path, destination)
 
 
 def sync_path(src: Path, dst: Path) -> None:

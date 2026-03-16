@@ -6,7 +6,6 @@ from tests.golden.helpers import (
     load_module_from_path,
     normalized_file_text,
     prepare_workspace,
-    run_module_main,
 )
 
 
@@ -15,22 +14,14 @@ def test_stage06_slices_matches_golden(tmp_path):
     root_aliases = [(baseline_root, ''), (work_root, ''), (REPO_ROOT, '')]
     module = load_module_from_path(
         'test_golden_stage06_slices',
-        REPO_ROOT / 'tools/run_pipeline.py',
+        REPO_ROOT / 'tools/stage/stage06_slices.py',
     )
 
     output_dir = work_root / 'expected/06_slices'
-    assert (
-        run_module_main(
-            module,
-            [
-                'stage06',
-                '--signature-db-dir',
-                str(baseline_root / 'expected/05_pair_trace_ds/paired_signatures'),
-                '--output-dir',
-                str(output_dir),
-            ],
-        )
-        == 0
+    module.generate_slices(
+        signature_db_dir=baseline_root / 'expected/05_pair_trace_ds/paired_signatures',
+        output_dir=output_dir,
+        run_dir=work_root / 'expected',
     )
 
     assert_directory_matches(

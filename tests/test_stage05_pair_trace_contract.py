@@ -7,7 +7,6 @@ from tests.golden.helpers import (
     REPO_ROOT,
     load_module_from_path,
     prepare_workspace,
-    run_module_main,
 )
 
 
@@ -15,24 +14,15 @@ def test_stage05_pair_trace_contract(tmp_path, monkeypatch):
     baseline_root, work_root = prepare_workspace(tmp_path)
     module = load_module_from_path(
         'test_stage05_pair_trace_contract',
-        REPO_ROOT / 'tools/run_pipeline.py',
+        REPO_ROOT / 'tools/stage/stage05_pair_trace.py',
     )
 
     monkeypatch.chdir(baseline_root)
     output_dir = work_root / 'expected/05_pair_trace_ds'
-    assert (
-        run_module_main(
-            module,
-            [
-                'stage05',
-                '--trace-jsonl',
-                str(baseline_root / 'expected/04_trace_flow/trace_flow_match_strict.jsonl'),
-                '--output-dir',
-                str(output_dir),
-            ],
-            cwd=baseline_root,
-        )
-        == 0
+    monkeypatch.chdir(baseline_root)
+    module.build_paired_trace_dataset(
+        trace_jsonl=baseline_root / 'expected/04_trace_flow/trace_flow_match_strict.jsonl',
+        output_dir=output_dir,
     )
 
     pairs_path = output_dir / 'pairs.jsonl'

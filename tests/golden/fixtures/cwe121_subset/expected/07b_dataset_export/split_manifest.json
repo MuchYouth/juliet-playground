@@ -4,7 +4,6 @@
     "test": 0,
     "train_val": 3
   },
-  "output_dir": "expected/07b_dataset_export",
   "pair_ids": {
     "test": [],
     "train_val": [
@@ -12,9 +11,5 @@
       "1ddbb5add512d983",
       "fa37df710e294627"
     ]
-  },
-  "seed": 1234,
-  "split_unit": "pair_id",
-  "test_ratio": 0.0,
-  "train_ratio": 1.0
+  }
 }

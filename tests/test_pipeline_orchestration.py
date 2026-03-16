@@ -292,9 +292,6 @@ def test_run_step07b_train_patched_counterparts_uses_stage_api(tmp_path, monkeyp
 
     params = captured['params']
     assert params.run_dir == paths.run_dir
-    assert params.dataset_export_dir == paths.dataset.output_dir
-    assert params.signature_output_dir == paths.patched_pair.signatures_dir
-    assert params.slice_output_dir == paths.patched_slices.output_dir
     assert params.dedup_mode == 'none'
     assert result['dataset']['summary_json'] == str(paths.patched_dataset.summary_json)
 

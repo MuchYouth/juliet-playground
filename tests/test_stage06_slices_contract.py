@@ -6,7 +6,6 @@ from tests.golden.helpers import (
     REPO_ROOT,
     load_module_from_path,
     prepare_workspace,
-    run_module_main,
 )
 
 
@@ -14,22 +13,13 @@ def test_stage06_slices_contract(tmp_path):
     baseline_root, work_root = prepare_workspace(tmp_path)
     module = load_module_from_path(
         'test_stage06_slices_contract',
-        REPO_ROOT / 'tools/run_pipeline.py',
+        REPO_ROOT / 'tools/stage/stage06_slices.py',
     )
 
     output_dir = work_root / 'expected/06_slices'
-    assert (
-        run_module_main(
-            module,
-            [
-                'stage06',
-                '--signature-db-dir',
-                str(baseline_root / 'expected/05_pair_trace_ds/paired_signatures'),
-                '--output-dir',
-                str(output_dir),
-            ],
-        )
-        == 0
+    module.generate_slices(
+        signature_db_dir=baseline_root / 'expected/05_pair_trace_ds/paired_signatures',
+        output_dir=output_dir,
     )
 
     slice_dir = output_dir / 'slice'
