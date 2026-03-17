@@ -123,6 +123,27 @@ def _normalize_flow_item(*, child: ET.Element, file_path: str, function_name: st
     return copied
 
 
+def _cwe_prefix_from_file_path(file_path: str) -> str | None:
+    file_name = Path(file_path).name.strip()
+    if not file_name:
+        return None
+    prefix = file_name.split('_', 1)[0].strip().upper()
+    return prefix or None
+
+
+def _cwe_prefix_from_flaw_name(name: str) -> str | None:
+    prefix = name.split(':', 1)[0].strip().replace('-', '').upper()
+    return prefix or None
+
+
+def _manifest_flaw_cwe_matches_file(item: ET.Element) -> bool | None:
+    file_prefix = _cwe_prefix_from_file_path(item.attrib.get('file', ''))
+    name_prefix = _cwe_prefix_from_flaw_name(item.attrib.get('name', ''))
+    if not file_prefix or not name_prefix:
+        return None
+    return file_prefix == name_prefix
+
+
 def _dedup_flow_items(items: list[ET.Element]) -> tuple[list[ET.Element], int]:
     grouped: dict[tuple[str, str, str], list[tuple[int, ET.Element]]] = defaultdict(list)
     for index, item in enumerate(items):
@@ -138,16 +159,34 @@ def _dedup_flow_items(items: list[ET.Element]) -> tuple[list[ET.Element], int]:
     removed_comment_flaw = 0
     for key, members in grouped.items():
         tag = key[0]
-        origins = {member.attrib.get('origin', '') for _, member in members}
+        filtered_members = members
+        if tag == 'flaw':
+            manifest_match_state = {
+                index: _manifest_flaw_cwe_matches_file(member)
+                for index, member in members
+                if member.attrib.get('origin') == MANIFEST_FLAW_ORIGIN
+            }
+            has_matching_manifest = any(state is True for state in manifest_match_state.values())
+            if has_matching_manifest:
+                filtered_members = [
+                    (index, member)
+                    for index, member in members
+                    if not (
+                        member.attrib.get('origin') == MANIFEST_FLAW_ORIGIN
+                        and manifest_match_state.get(index) is False
+                    )
+                ]
+
+        origins = {member.attrib.get('origin', '') for _, member in filtered_members}
         if tag == 'flaw' and MANIFEST_FLAW_ORIGIN in origins and COMMENT_FLAW_ORIGIN in origins:
-            for index, member in members:
+            for index, member in filtered_members:
                 if member.attrib.get('origin') == COMMENT_FLAW_ORIGIN:
                     removed_comment_flaw += 1
                     continue
                 keep_indices.add(index)
             continue
 
-        for index, _ in members:
+        for index, _ in filtered_members:
             keep_indices.add(index)
 
     deduped = [item for index, item in enumerate(items) if index in keep_indices]
@@ -177,6 +216,7 @@ def _add_flow_tags_to_tree(
     fn_to_flow: dict[str, str],
     output_xml: Path,
     summary_json: Path | None = None,
+    prune_single_child_flows: bool = True,
 ) -> dict[str, object]:
     root = tree.getroot()
     per_flow_counts = Counter()
@@ -232,6 +272,8 @@ def _add_flow_tags_to_tree(
             dedup_removed_comment_flaw += removed
             if not items:
                 continue
+            if prune_single_child_flows and len(items) == 1:
+                continue
 
             flow_elem = ET.Element('flow', {'type': flow_type})
             for item in items:
@@ -269,6 +311,7 @@ def add_flow_tags_to_testcase(
     input_xml: Path,
     output_xml: Path,
     summary_json: Path | None = None,
+    prune_single_child_flows: bool = True,
 ) -> dict[str, object]:
     if not input_xml.exists():
         raise FileNotFoundError(f'Input XML not found: {input_xml}')
@@ -279,6 +322,7 @@ def add_flow_tags_to_testcase(
         fn_to_flow=build_function_flow_map_from_manifest_comments(input_xml),
         output_xml=output_xml,
         summary_json=summary_json,
+        prune_single_child_flows=prune_single_child_flows,
     )
 
 
@@ -286,12 +330,14 @@ def run_stage02b_flow(
     *,
     input_xml: Path,
     output_dir: Path,
+    prune_single_child_flows: bool = True,
 ) -> dict[str, object]:
     output_paths = build_stage02b_output_paths(output_dir)
     partition_result = add_flow_tags_to_testcase(
         input_xml=input_xml,
         output_xml=output_paths['manifest_with_testcase_flows_xml'],
         summary_json=None,
+        prune_single_child_flows=prune_single_child_flows,
     )
     artifacts = path_strings(output_paths)
     stats = {'testcases': int(partition_result['testcases'])}
