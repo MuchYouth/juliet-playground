@@ -185,6 +185,15 @@ python tools/run_pipeline.py stage07b \
   --run-dir "$RUN_DIR" \
   --overwrite
 
+# 최신 pipeline run의 Real_Vul_data.csv 를 VP-Bench linevul 컨테이너로 넘겨
+# prepare -> train -> test 실행
+python tools/run_linevul.py
+
+# 특정 run 대상 dry-run
+python tools/run_linevul.py \
+  --run-dir artifacts/pipeline-runs/run-2026.03.17-11:28:48 \
+  --dry-run
+
 # 두 pipeline run 또는 dataset export 디렉터리 비교
 python tools/compare-artifacts.py \
   artifacts/pipeline-runs/run-before \
@@ -192,6 +201,24 @@ python tools/compare-artifacts.py \
 ```
 
 추가 명령 예시와 재실행 패턴은 [`docs/rerun.md`](docs/rerun.md)에 정리되어 있습니다.
+
+## LineVul 연동 메모
+
+- `tools/run_linevul.py` 는 Stage 07의 `Real_Vul_data.csv` 를 읽어
+  VP-Bench의 `linevul` 컨테이너에서
+  `baseline/RealVul/Experiments/LineVul/line_vul.py` 를 실행합니다.
+- 기본 대상 경로:
+  - VP-Bench root: `/home/sojeon/Desktop/VP-Bench`
+  - container: `linevul`
+- 결과는 기본적으로 VP-Bench 쪽에만 저장됩니다.
+  - dataset staging:
+    `downloads/RealVul/datasets/juliet-playground/<run-id>/`
+  - linevul output:
+    `baseline/RealVul/Experiments/LineVul/juliet-playground/<run-id>/`
+- 이 스크립트는 원본 `linevul_main.py` 대신 VP-Bench 커스텀 `line_vul.py` 를 사용합니다.
+  현재 Stage 07 CSV 는 `processed_func`, `vulnerable_line_numbers`, `dataset_type` 기준으로는
+  바로 사용할 수 있지만, 원본 `linevul_main.py` 가 기대하는
+  `flaw_line`, `flaw_line_index` 컬럼은 포함하지 않습니다.
 
 ## 메모
 
