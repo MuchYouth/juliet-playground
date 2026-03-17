@@ -24,6 +24,9 @@ def test_build_full_run_paths_recreates_expected_layout(tmp_path):
         paths['trace_strict_jsonl']
         == run_dir.resolve() / '04_trace_flow' / 'trace_flow_match_strict.jsonl'
     )
+    assert paths['stage02b_epic002']['source_sink_classified_xml'] == (
+        run_dir.resolve() / '02b_flow' / 'epic002' / 'source_sink_classified.xml'
+    )
     assert paths['trace']['traces_jsonl'] == run_dir.resolve() / '05_trace_ds' / 'traces.jsonl'
     assert paths['trace_slices']['slice_dir'] == run_dir.resolve() / '06_trace_slices' / 'slice'
     assert (
@@ -96,6 +99,40 @@ def test_run_step02a_code_field_inventory_uses_stage_api(tmp_path, monkeypatch):
     assert result['artifacts']['pulse_taint_config'] == str(paths['generated_taint_config'])
 
 
+def test_run_step02a_code_field_inventory_can_use_custom_input_xml(tmp_path, monkeypatch):
+    module = load_module_from_path(
+        'test_pipeline_step02a_helper_custom_input',
+        REPO_ROOT / 'tools/run_pipeline.py',
+    )
+
+    paths = module._build_full_run_paths(
+        run_dir=tmp_path / 'run', source_root=tmp_path / 'juliet' / 'C'
+    )
+    captured: dict[str, object] = {}
+
+    def fake_extract_unique_code_fields(**kwargs):
+        captured.update(kwargs)
+        write_text(kwargs['pulse_taint_config_output'], '{}\n')
+        return {
+            'artifacts': {'pulse_taint_config': str(kwargs['pulse_taint_config_output'])},
+            'stats': {},
+        }
+
+    monkeypatch.setattr(
+        module._stage02a_taint, 'extract_unique_code_fields', fake_extract_unique_code_fields
+    )
+
+    custom_input_xml = paths['stage02b_epic002']['source_sink_classified_xml']
+    result = module.run_step02a_code_field_inventory(
+        paths=paths,
+        source_root=tmp_path / 'juliet' / 'C',
+        input_xml=custom_input_xml,
+    )
+
+    assert captured['input_xml'] == custom_input_xml
+    assert result['artifacts']['pulse_taint_config'] == str(paths['generated_taint_config'])
+
+
 def test_run_step02b_flow_build_returns_compact_stage_result(tmp_path, monkeypatch):
     module = load_module_from_path(
         'test_pipeline_step02b_helpers',
@@ -161,6 +198,44 @@ def test_run_step02b_flow_build_can_keep_single_child_flows_when_requested(tmp_p
     module.run_step02b_flow_build(paths=paths, prune_single_child_flows=False)
 
     assert called['prune_single_child_flows'] is False
+
+
+def test_run_step02b_epic002_classification_returns_compact_stage_result(tmp_path, monkeypatch):
+    module = load_module_from_path(
+        'test_pipeline_step02b_epic002_helpers',
+        REPO_ROOT / 'tools/run_pipeline.py',
+    )
+
+    paths = module._build_full_run_paths(
+        run_dir=tmp_path / 'run', source_root=tmp_path / 'juliet' / 'C'
+    )
+    called: dict[str, object] = {}
+
+    def fake_run_stage02b_epic002(**kwargs):
+        called.update(kwargs)
+        write_text(paths['stage02b_epic002']['source_sink_classified_xml'], '<root />\n')
+        write_text(paths['stage02b_epic002']['source_sink_exceptions_xml'], '<root />\n')
+        write_text(paths['stage02b_epic002']['summary_json'], '{}\n')
+        return {
+            'artifacts': {
+                'source_sink_classified_xml': str(
+                    paths['stage02b_epic002']['source_sink_classified_xml']
+                ),
+                'source_sink_exceptions_xml': str(
+                    paths['stage02b_epic002']['source_sink_exceptions_xml']
+                ),
+                'summary_json': str(paths['stage02b_epic002']['summary_json']),
+            },
+            'stats': {'classified_flows_total': 1},
+        }
+
+    monkeypatch.setattr(module._stage02b_epic002, 'run_stage02b_epic002', fake_run_stage02b_epic002)
+
+    result = module.run_step02b_epic002_classification(paths=paths)
+
+    assert called['input_xml'] == paths['stage02b']['manifest_with_testcase_flows_xml']
+    assert called['output_dir'] == paths['stage02b_epic002']['output_dir']
+    assert result['artifacts']['summary_json'] == str(paths['stage02b_epic002']['summary_json'])
 
 
 def test_run_step07_dataset_export_uses_primary_dataset_api(tmp_path, monkeypatch):

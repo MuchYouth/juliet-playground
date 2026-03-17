@@ -15,6 +15,10 @@ python tools/run_pipeline.py full 78 89
 # 전체 CWE
 python tools/run_pipeline.py full --all
 
+# Stage 02a를 legacy manifest 입력으로 되돌리기
+python tools/run_pipeline.py full 78 \
+  --disable-epic002-for-02a
+
 # 재현성 옵션 예시
 python tools/run_pipeline.py full 78 \
   --run-id run-my-fixed-id \

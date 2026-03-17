@@ -56,6 +56,10 @@ artifacts/pipeline-runs/run-YYYY.MM.DD-HH:MM:SS/
 │   ├── pulse-taint-config.json
 │   └── summary.json
 ├── 02b_flow/
+│   ├── epic002/
+│   │   ├── source_sink_classified.xml
+│   │   ├── source_sink_exceptions.xml
+│   │   └── summary.json
 │   ├── manifest_with_testcase_flows.xml
 │   └── summary.json
 ├── 03_infer-results/

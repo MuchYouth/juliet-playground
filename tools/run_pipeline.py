@@ -20,6 +20,7 @@ from shared.artifact_layout import (
 from shared.paths import PROJECT_HOME, PULSE_TAINT_CONFIG, RESULT_DIR
 from stage import stage01_manifest as _stage01_manifest
 from stage import stage02a_taint as _stage02a_taint
+from stage import stage02b_epic002 as _stage02b_epic002
 from stage import stage02b_flow as _stage02b_flow
 from stage import stage03_infer as _stage03_infer
 from stage import stage04_trace_flow as _stage04_trace_flow
@@ -58,6 +59,7 @@ class FullRunConfig:
     dedup_mode: str
     enable_pair: bool
     prune_single_child_flows: bool
+    use_epic002_for_02a: bool
 
 
 def parse_args() -> argparse.Namespace:
@@ -105,7 +107,13 @@ def parse_args() -> argparse.Namespace:
         action='store_false',
         help='Keep flow tags that have exactly one child after Stage 02b dedup.',
     )
-    full.set_defaults(enable_pair=True, prune_single_child_flows=True)
+    full.add_argument(
+        '--disable-epic002-for-02a',
+        dest='use_epic002_for_02a',
+        action='store_false',
+        help='Use 01_manifest/manifest_with_comments.xml directly for Stage 02a.',
+    )
+    full.set_defaults(enable_pair=True, prune_single_child_flows=True, use_epic002_for_02a=True)
 
     return parser.parse_args()
 
@@ -141,6 +149,9 @@ def _build_full_run_paths(*, run_dir: Path, source_root: Path) -> dict[str, obje
         'generated_taint_config': taint_dir / 'pulse-taint-config.json',
         'trace_strict_jsonl': trace_dir / 'trace_flow_match_strict.jsonl',
         'stage02b': _stage02b_flow.build_stage02b_output_paths(flow_dir),
+        'stage02b_epic002': _stage02b_epic002.build_stage02b_epic002_output_paths(
+            flow_dir / 'epic002'
+        ),
         'pair': pair_paths,
         'trace': trace_paths,
         'slices': slice_paths,
@@ -190,6 +201,7 @@ def _normalize_full_run_config(config: FullRunConfig) -> FullRunConfig:
         dedup_mode=config.dedup_mode,
         enable_pair=config.enable_pair,
         prune_single_child_flows=config.prune_single_child_flows,
+        use_epic002_for_02a=config.use_epic002_for_02a,
     )
 
 
@@ -228,9 +240,11 @@ def run_step02a_code_field_inventory(
     *,
     paths: dict[str, object],
     source_root: Path,
+    input_xml: Path | None = None,
 ) -> dict[str, object]:
+    selected_input_xml = input_xml or paths['manifest_with_comments_xml']
     result = _stage02a_taint.extract_unique_code_fields(
-        input_xml=paths['manifest_with_comments_xml'],
+        input_xml=selected_input_xml,
         source_root=source_root,
         output_dir=paths['taint_dir'],
         pulse_taint_config_output=paths['generated_taint_config'],
@@ -253,6 +267,26 @@ def run_step02b_flow_build(
         paths['stage02b']['manifest_with_testcase_flows_xml'], 'manifest_with_testcase_flows_xml'
     )
     _require_exists(paths['stage02b']['summary_json'], '02b summary_json')
+    return result
+
+
+def run_step02b_epic002_classification(
+    *,
+    paths: dict[str, object],
+) -> dict[str, object]:
+    result = _stage02b_epic002.run_stage02b_epic002(
+        input_xml=paths['stage02b']['manifest_with_testcase_flows_xml'],
+        output_dir=paths['stage02b_epic002']['output_dir'],
+    )
+    _require_exists(
+        paths['stage02b_epic002']['source_sink_classified_xml'],
+        'source_sink_classified_xml',
+    )
+    _require_exists(
+        paths['stage02b_epic002']['source_sink_exceptions_xml'],
+        'source_sink_exceptions_xml',
+    )
+    _require_exists(paths['stage02b_epic002']['summary_json'], '02b epic002 summary_json')
     return result
 
 
@@ -432,14 +466,26 @@ def run_full_pipeline(config: FullRunConfig) -> int:
             manifest=config.manifest,
             source_root=config.source_root,
         )
-        run_step02a_code_field_inventory(
-            paths=paths,
-            source_root=config.source_root,
-        )
-        run_step02b_flow_build(
-            paths=paths,
-            prune_single_child_flows=config.prune_single_child_flows,
-        )
+        if config.use_epic002_for_02a:
+            run_step02b_flow_build(
+                paths=paths,
+                prune_single_child_flows=config.prune_single_child_flows,
+            )
+            run_step02b_epic002_classification(paths=paths)
+            run_step02a_code_field_inventory(
+                paths=paths,
+                source_root=config.source_root,
+                input_xml=paths['stage02b_epic002']['source_sink_classified_xml'],
+            )
+        else:
+            run_step02a_code_field_inventory(
+                paths=paths,
+                source_root=config.source_root,
+            )
+            run_step02b_flow_build(
+                paths=paths,
+                prune_single_child_flows=config.prune_single_child_flows,
+            )
 
         selected_taint_config, _ = _select_taint_config(
             generated_taint_config=paths['generated_taint_config'],
@@ -503,6 +549,7 @@ def main() -> int:
                 dedup_mode=args.dedup_mode,
                 enable_pair=args.enable_pair,
                 prune_single_child_flows=args.prune_single_child_flows,
+                use_epic002_for_02a=args.use_epic002_for_02a,
             )
         )
     except ValueError as exc:
