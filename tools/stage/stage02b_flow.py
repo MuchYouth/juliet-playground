@@ -15,6 +15,18 @@ PYC_C_FUNC_RE = re.compile(
     re.IGNORECASE,
 )
 FLOW_PARTITION_TARGET_TAGS = ('comment_flaw', 'comment_fix', 'flaw')
+FLOW_OUTPUT_TAG_BY_INPUT_TAG = {
+    'comment_flaw': 'flaw',
+    'comment_fix': 'fix',
+    'flaw': 'flaw',
+}
+FLOW_ORIGIN_BY_INPUT_TAG = {
+    'comment_flaw': 'comment_flaw',
+    'comment_fix': 'comment_fix',
+    'flaw': 'manifest_flaw',
+}
+MANIFEST_FLAW_ORIGIN = 'manifest_flaw'
+COMMENT_FLAW_ORIGIN = 'comment_flaw'
 BASE_FLOW_ORDER = ('b2b', 'b2g', 'g2b')
 FAMILY_TO_FLOW = {
     'b2b_family': 'b2b',
@@ -106,6 +118,47 @@ def _flow_sort_key(flow_type: str) -> tuple[int, int, str]:
     return (10**9, 10**9, flow_type)
 
 
+def _normalize_flow_item(*, child: ET.Element, file_path: str, function_name: str) -> ET.Element:
+    copied = copy.deepcopy(child)
+    copied.tag = FLOW_OUTPUT_TAG_BY_INPUT_TAG[child.tag]
+    copied.attrib['file'] = file_path
+    copied.attrib['function'] = function_name
+    copied.attrib['origin'] = FLOW_ORIGIN_BY_INPUT_TAG[child.tag]
+    copied.attrib.pop('inferred_function', None)
+    return copied
+
+
+def _dedup_flow_items(items: list[ET.Element]) -> tuple[list[ET.Element], int]:
+    grouped: dict[tuple[str, str, str], list[tuple[int, ET.Element]]] = defaultdict(list)
+    for index, item in enumerate(items):
+        grouped[
+            (
+                item.tag,
+                item.attrib.get('file', ''),
+                str(item.attrib.get('line', '')),
+            )
+        ].append((index, item))
+
+    keep_indices: set[int] = set()
+    removed_comment_flaw = 0
+    for key, members in grouped.items():
+        tag = key[0]
+        origins = {member.attrib.get('origin', '') for _, member in members}
+        if tag == 'flaw' and MANIFEST_FLAW_ORIGIN in origins and COMMENT_FLAW_ORIGIN in origins:
+            for index, member in members:
+                if member.attrib.get('origin') == COMMENT_FLAW_ORIGIN:
+                    removed_comment_flaw += 1
+                    continue
+                keep_indices.add(index)
+            continue
+
+        for index, _ in members:
+            keep_indices.add(index)
+
+    deduped = [item for index, item in enumerate(items) if index in keep_indices]
+    return deduped, removed_comment_flaw
+
+
 def _add_flow_tags_to_tree(
     *,
     tree: ET.ElementTree,
@@ -120,6 +173,7 @@ def _add_flow_tags_to_tree(
     unresolved_flaw = 0
     unresolved_comment = 0
     testcase_count = 0
+    dedup_removed_comment_flaw = 0
 
     for testcase in root.findall('testcase'):
         testcase_count += 1
@@ -159,19 +213,26 @@ def _add_flow_tags_to_tree(
                         unresolved_flaw += 1
                         continue
                     flow_type = flow_type_from_function(flow, inferred_function)
+                    function_name = inferred_function
 
-                copied = copy.deepcopy(child)
-                copied.attrib['file'] = file_path
-                if inferred_function:
-                    copied.attrib['inferred_function'] = inferred_function
+                copied = _normalize_flow_item(
+                    child=child,
+                    file_path=file_path,
+                    function_name=function_name or '',
+                )
                 flow_buckets[flow_type].append(copied)
-                per_flow_counts[flow_type] += 1
-                tag_counts[child.tag] += 1
 
         for flow_type in sorted(flow_buckets, key=_flow_sort_key):
+            items, removed = _dedup_flow_items(flow_buckets[flow_type])
+            dedup_removed_comment_flaw += removed
+            if not items:
+                continue
+
             flow_elem = ET.Element('flow', {'type': flow_type})
-            for item in flow_buckets[flow_type]:
+            for item in items:
                 flow_elem.append(item)
+                per_flow_counts[flow_type] += 1
+                tag_counts[item.tag] += 1
             testcase.append(flow_elem)
 
     output_xml.parent.mkdir(parents=True, exist_ok=True)
@@ -191,6 +252,7 @@ def _add_flow_tags_to_tree(
         'tag_counts_in_flows': dict(tag_counts),
         'unresolved_comment_records': unresolved_comment,
         'unresolved_flaw_records': unresolved_flaw,
+        'dedup_removed_comment_flaw_records': dedup_removed_comment_flaw,
     }
     if summary_json is not None:
         write_summary_json(summary_json, summary, echo=False)

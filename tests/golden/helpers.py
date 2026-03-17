@@ -335,9 +335,9 @@ def assert_unordered_jsonl_matches(
 
 def _canonical_flow_xml(
     path: Path, root_aliases: list[tuple[Path, str]]
-) -> dict[tuple[str, ...], dict[str, set[tuple[str, str, str, str, str]]]]:
+) -> dict[tuple[str, ...], dict[str, set[tuple[str, str, str, str, str, str]]]]:
     root = ET.parse(path).getroot()
-    canonical: dict[tuple[str, ...], dict[str, set[tuple[str, str, str, str, str]]]] = {}
+    canonical: dict[tuple[str, ...], dict[str, set[tuple[str, str, str, str, str, str]]]] = {}
 
     for testcase in root.findall('testcase'):
         testcase_key = tuple(
@@ -346,12 +346,12 @@ def _canonical_flow_xml(
                 for file_elem in testcase.findall('file')
             )
         )
-        flow_map: dict[str, set[tuple[str, str, str, str, str]]] = {}
+        flow_map: dict[str, set[tuple[str, str, str, str, str, str]]] = {}
         for flow_elem in testcase.findall('flow'):
             flow_type = flow_elem.attrib.get('type', '')
             if not flow_type:
                 continue
-            items: set[tuple[str, str, str, str, str]] = set()
+            items: set[tuple[str, str, str, str, str, str]] = set()
             for child in list(flow_elem):
                 items.add(
                     (
@@ -359,7 +359,8 @@ def _canonical_flow_xml(
                         _normalize_path_string(child.attrib.get('file', ''), root_aliases),
                         str(child.attrib.get('line', '')),
                         str(child.attrib.get('function', '')),
-                        str(child.attrib.get('inferred_function', '')),
+                        str(child.attrib.get('origin', '')),
+                        str(child.attrib.get('name', '')),
                     )
                 )
             flow_map[flow_type] = items

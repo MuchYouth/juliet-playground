@@ -115,6 +115,15 @@ source .venv/bin/activate && python tools/run_pipeline.py full --all
 8. `07_dataset_export`: normalize / dedup / token filtering / split / CSV export
 9. `07b`: train patched counterpart 평가용 export 추가 생성
 
+### Flow XML note
+
+- Stage 01 manifest의 `<comment_flaw>` / `<comment_fix>` 는 Stage 02b flow XML에서 각각
+  `<flaw>` / `<fix>` 로 정규화됩니다.
+- Stage 02b flow XML의 함수명 필드는 `function` 하나로 통일됩니다.
+- 같은 `(file, line)` 에서 원래 manifest의 `<flaw>` 와 comment 유래 `<flaw>` 가 겹치면,
+  `origin="manifest_flaw"` 인 원본 `flaw` 를 남기고 comment 유래 `flaw` 는 제거합니다.
+- flow XML에서는 `origin` 속성으로 항목 출처를 구분할 수 있습니다.
+
 ## 결과 위치 (요약)
 
 ```text

@@ -1,6 +1,7 @@
 {
+  "dedup_removed_comment_flaw_records": 5,
   "flow_tag_item_counts": {
-    "b2b": 18,
+    "b2b": 13,
     "b2g1": 2,
     "b2g2": 2,
     "g2b": 8,
@@ -10,9 +11,8 @@
   "input_xml": "expected/01_manifest/manifest_with_comments.xml",
   "output_xml": "expected/02c_flow/manifest_with_testcase_flows.xml",
   "tag_counts_in_flows": {
-    "comment_fix": 10,
-    "comment_flaw": 22,
-    "flaw": 6
+    "fix": 10,
+    "flaw": 23
   },
   "testcases": 6,
   "unresolved_comment_records": 0,

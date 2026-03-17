@@ -47,13 +47,18 @@ def test_stage02c_flow_partition_contract(tmp_path):
             flow_count += 1
             assert flow.attrib.get('type', '').strip()
             for item in list(flow):
-                assert item.tag in {'comment_flaw', 'comment_fix', 'flaw'}
+                assert item.tag in {'flaw', 'fix'}
                 assert item.attrib.get('file', '').strip()
                 assert int(item.attrib.get('line', '0') or 0) > 0
-                if item.tag in {'comment_flaw', 'comment_fix'}:
-                    assert item.attrib.get('function', '').strip()
+                assert item.attrib.get('function', '').strip()
+                assert item.attrib.get('origin', '').strip()
+                assert 'inferred_function' not in item.attrib
+                if item.tag == 'fix':
+                    assert item.attrib['origin'] == 'comment_fix'
                 else:
-                    assert item.attrib.get('inferred_function', '').strip()
+                    assert item.attrib['origin'] in {'manifest_flaw', 'comment_flaw'}
+                    if item.attrib['origin'] == 'manifest_flaw':
+                        assert item.attrib.get('name', '').strip()
 
     assert flow_count > 0
 
@@ -63,3 +68,4 @@ def test_stage02c_flow_partition_contract(tmp_path):
     assert isinstance(summary['tag_counts_in_flows'], dict)
     assert 'unresolved_comment_records' in summary
     assert 'unresolved_flaw_records' in summary
+    assert 'dedup_removed_comment_flaw_records' in summary

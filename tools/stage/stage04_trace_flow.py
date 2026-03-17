@@ -9,7 +9,7 @@ from pathlib import Path
 from shared.jsonio import write_jsonl, write_stage_summary
 from shared.juliet_keys import derive_testcase_key_from_file_name
 
-TARGET_TAGS = {'flaw', 'comment_flaw', 'comment_fix'}
+TARGET_TAGS = {'flaw', 'fix'}
 
 
 @dataclass(frozen=True)
