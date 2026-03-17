@@ -62,3 +62,71 @@ def test_add_flow_tags_normalizes_tags_unifies_function_and_dedups_manifest_flaw
     summary = json.loads(summary_json.read_text(encoding='utf-8'))
     assert summary['tag_counts_in_flows'] == {'flaw': 2, 'fix': 1}
     assert summary['dedup_removed_comment_flaw_records'] == 1
+
+
+def test_add_flow_tags_groups_numbered_vasink_variants_into_numbered_flows(tmp_path):
+    module = load_module_from_path(
+        'test_stage02b_flow_partition_vasink_numbering',
+        REPO_ROOT / 'tools/stage/stage02b_flow.py',
+    )
+
+    input_xml = tmp_path / 'manifest_with_comments.xml'
+    output_xml = tmp_path / 'manifest_with_testcase_flows.xml'
+    write_text(
+        input_xml,
+        """<?xml version='1.0' encoding='utf-8'?>
+<container>
+  <testcase>
+    <file path="sample.c">
+      <comment_fix line="10" function="goodB2G1VaSinkG" code="fix_b2g1_vasinkg();" />
+      <comment_fix line="20" function="goodB2G2VaSinkG" code="fix_b2g2_vasinkg();" />
+      <comment_flaw line="30" function="goodG2B1VaSinkB" code="flaw_g2b1_vasinkb();" />
+      <comment_flaw line="40" function="goodG2B2VaSinkB" code="flaw_g2b2_vasinkb();" />
+      <comment_fix
+        line="50"
+        function="CWE134_Uncontrolled_Format_String__char_connect_socket_vprintf_22_goodB2G1_vasink"
+        code="fix_b2g1_22b_vasink();"
+      />
+      <comment_fix
+        line="60"
+        function="CWE134_Uncontrolled_Format_String__char_connect_socket_vprintf_22_goodB2G2_vasink"
+        code="fix_b2g2_22b_vasink();"
+      />
+    </file>
+  </testcase>
+</container>
+""",
+    )
+
+    module.add_flow_tags_to_testcase(
+        input_xml=input_xml,
+        output_xml=output_xml,
+        summary_json=None,
+    )
+
+    root = ET.parse(output_xml).getroot()
+    testcase = root.find('testcase')
+    assert testcase is not None
+    flows = {
+        flow.attrib['type']: {(item.tag, item.attrib['function']) for item in flow}
+        for flow in testcase.findall('flow')
+    }
+
+    assert 'b2g' not in flows
+    assert 'g2b' not in flows
+    assert flows['b2g1'] == {
+        ('fix', 'goodB2G1VaSinkG'),
+        (
+            'fix',
+            'CWE134_Uncontrolled_Format_String__char_connect_socket_vprintf_22_goodB2G1_vasink',
+        ),
+    }
+    assert flows['b2g2'] == {
+        ('fix', 'goodB2G2VaSinkG'),
+        (
+            'fix',
+            'CWE134_Uncontrolled_Format_String__char_connect_socket_vprintf_22_goodB2G2_vasink',
+        ),
+    }
+    assert flows['g2b1'] == {('flaw', 'goodG2B1VaSinkB')}
+    assert flows['g2b2'] == {('flaw', 'goodG2B2VaSinkB')}
