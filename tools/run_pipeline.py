@@ -117,7 +117,6 @@ def _build_full_run_paths(*, run_dir: Path, source_root: Path) -> dict[str, obje
         'manifest_with_comments_xml': manifest_dir / 'manifest_with_comments.xml',
         'generated_taint_config': taint_dir / 'pulse-taint-config.json',
         'trace_strict_jsonl': trace_dir / 'trace_flow_match_strict.jsonl',
-        'source_testcases_root': source_root / 'testcases',
         'stage02b': _stage02b_flow.build_stage02b_output_paths(flow_dir),
         'pair': pair_paths,
         'slices': slice_paths,
@@ -216,10 +215,11 @@ def run_step02a_code_field_inventory(
 def run_step02b_flow_build(*, paths: dict[str, object]) -> dict[str, object]:
     result = _stage02b_flow.run_stage02b_flow(
         input_xml=paths['manifest_with_comments_xml'],
-        source_root=paths['source_testcases_root'],
         output_dir=paths['flow_dir'],
     )
-    _require_exists(paths['stage02b']['manifest_with_testcase_flows_xml'], 'manifest_with_testcase_flows_xml')
+    _require_exists(
+        paths['stage02b']['manifest_with_testcase_flows_xml'], 'manifest_with_testcase_flows_xml'
+    )
     _require_exists(paths['stage02b']['summary_json'], '02b summary_json')
     return result
 
@@ -268,7 +268,12 @@ def run_step05_pair_trace(*, paths: dict[str, object]) -> dict[str, object]:
         overwrite=False,
         run_dir=paths['run_dir'],
     )
-    for key in ('pairs_jsonl', 'leftover_counterparts_jsonl', 'paired_signatures_dir', 'summary_json'):
+    for key in (
+        'pairs_jsonl',
+        'leftover_counterparts_jsonl',
+        'paired_signatures_dir',
+        'summary_json',
+    ):
         _require_exists(paths['pair'][key], f'05_pair_trace_ds/{key}')
     return result
 

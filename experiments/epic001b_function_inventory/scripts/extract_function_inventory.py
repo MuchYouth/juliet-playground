@@ -5,7 +5,7 @@ import argparse
 import json
 from pathlib import Path
 
-from stage import stage02b_flow as _stage02b_flow
+from inventory_lib import extract_function_inventory
 
 
 def main() -> int:
@@ -31,7 +31,7 @@ def main() -> int:
     )
     args = parser.parse_args()
 
-    payload = _stage02b_flow.extract_function_inventory(
+    payload = extract_function_inventory(
         input_xml=args.input_xml,
         output_csv=args.output_csv,
         output_summary=args.output_summary,

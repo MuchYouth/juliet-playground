@@ -18,13 +18,6 @@ def main() -> int:
         ),
     )
     parser.add_argument(
-        '--function-categories-jsonl',
-        type=Path,
-        default=Path(
-            'experiments/epic001b_function_inventory/outputs/function_names_categorized.jsonl'
-        ),
-    )
-    parser.add_argument(
         '--output-xml',
         type=Path,
         default=Path(
@@ -40,7 +33,6 @@ def main() -> int:
 
     payload = _stage02b_flow.add_flow_tags_to_testcase(
         input_xml=args.input_xml,
-        function_categories_jsonl=args.function_categories_jsonl,
         output_xml=args.output_xml,
         summary_json=args.summary_json,
     )

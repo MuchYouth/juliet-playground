@@ -34,7 +34,6 @@ from tests.golden.helpers import (  # noqa: E402
 SYNC_TARGETS = {
     '01': ['seed/manifest_subset.xml', 'expected/01_manifest'],
     '02a': ['seed/manifest_subset.xml', 'expected/02a_taint'],
-    '02b': ['seed/manifest_subset.xml', 'expected/02b_inventory'],
     '02c': ['seed/manifest_subset.xml', 'expected/02c_flow'],
     '04': ['expected/03_signatures_non_empty', 'expected/04_trace_flow'],
     '05': ['expected/05_pair_trace_ds'],
@@ -62,7 +61,7 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         '--stage',
-        choices=['all', '01', '02a', '02b', '02c', '04', '05', '06', '07', '07b'],
+        choices=['all', '01', '02a', '02c', '04', '05', '06', '07', '07b'],
         default='all',
         help='Regenerate only the selected stage outputs (dependencies are still rebuilt in temp).',
     )
@@ -204,53 +203,6 @@ def run_stage02a(source_root: Path, temp_root: Path) -> None:
         raise RuntimeError(f'Stage 02a failed: {result}')
 
 
-def run_stage02b(source_root: Path, temp_root: Path) -> None:
-    output_dir = temp_root / 'expected/02b_inventory'
-    ensure_clean_dir(output_dir)
-
-    extract_module = load_module_from_path(
-        'golden_stage02b_extract',
-        REPO_ROOT / 'experiments/epic001b_function_inventory/scripts/extract_function_inventory.py',
-    )
-    result = run_module_main(
-        extract_module,
-        [
-            '--input-xml',
-            str(temp_root / 'expected/01_manifest/manifest_with_comments.xml'),
-            '--output-csv',
-            str(output_dir / 'function_names_unique.csv'),
-            '--output-summary',
-            str(output_dir / 'function_inventory_summary.json'),
-        ],
-    )
-    if result != 0:
-        raise RuntimeError(f'Stage 02b extract failed: {result}')
-
-    categorize_module = load_module_from_path(
-        'golden_stage02b_categorize',
-        REPO_ROOT / 'experiments/epic001b_function_inventory/scripts/categorize_function_names.py',
-    )
-    result = run_module_main(
-        categorize_module,
-        [
-            '--input-csv',
-            str(output_dir / 'function_names_unique.csv'),
-            '--manifest-xml',
-            str(temp_root / 'expected/01_manifest/manifest_with_comments.xml'),
-            '--source-root',
-            str(source_root / 'testcases'),
-            '--output-jsonl',
-            str(output_dir / 'function_names_categorized.jsonl'),
-            '--output-nested-json',
-            str(output_dir / 'grouped_family_role.json'),
-            '--output-summary',
-            str(output_dir / 'category_summary.json'),
-        ],
-    )
-    if result != 0:
-        raise RuntimeError(f'Stage 02b categorize failed: {result}')
-
-
 def run_stage02c(temp_root: Path) -> None:
     module = load_module_from_path(
         'golden_stage02c_flow_partition',
@@ -264,8 +216,6 @@ def run_stage02c(temp_root: Path) -> None:
         [
             '--input-xml',
             str(temp_root / 'expected/01_manifest/manifest_with_comments.xml'),
-            '--function-categories-jsonl',
-            str(temp_root / 'expected/02b_inventory/function_names_categorized.jsonl'),
             '--output-xml',
             str(output_dir / 'manifest_with_testcase_flows.xml'),
             '--summary-json',
@@ -429,7 +379,7 @@ def sync_fixture_tree(temp_root: Path, stage: str) -> None:
     sync_path(
         temp_root / 'seed/selection_manifest.json', FIXTURE_ROOT / 'seed/selection_manifest.json'
     )
-    if stage in {'01', '02a', '02b', '02c'}:
+    if stage in {'01', '02a', '02c'}:
         sync_path(temp_root / 'seed/manifest_subset.xml', FIXTURE_ROOT / 'seed/manifest_subset.xml')
 
     for relative in SYNC_TARGETS[stage]:
@@ -462,7 +412,6 @@ def main() -> int:
 
         run_stage01(source_root, temp_root, manifest_subset)
         run_stage02a(source_root, temp_root)
-        run_stage02b(source_root, temp_root)
         run_stage02c(temp_root)
         copy_signature_subset(source_run, temp_root / 'expected/03_signatures_non_empty')
         run_stage04(temp_root)

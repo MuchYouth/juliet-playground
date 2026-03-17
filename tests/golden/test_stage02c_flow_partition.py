@@ -27,8 +27,6 @@ def test_stage02c_flow_partition_matches_golden(tmp_path):
             [
                 '--input-xml',
                 str(baseline_root / 'expected/01_manifest/manifest_with_comments.xml'),
-                '--function-categories-jsonl',
-                str(baseline_root / 'expected/02b_inventory/function_names_categorized.jsonl'),
                 '--output-xml',
                 str(output_xml),
                 '--summary-json',

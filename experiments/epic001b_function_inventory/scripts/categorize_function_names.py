@@ -5,7 +5,7 @@ import argparse
 import json
 from pathlib import Path
 
-from stage import stage02b_flow as _stage02b_flow
+from inventory_lib import categorize_function_names
 
 
 def main() -> int:
@@ -44,7 +44,7 @@ def main() -> int:
     )
     args = parser.parse_args()
 
-    payload = _stage02b_flow.categorize_function_names(
+    payload = categorize_function_names(
         input_csv=args.input_csv,
         manifest_xml=args.manifest_xml,
         source_root=args.source_root,

@@ -63,9 +63,6 @@ artifacts/pipeline-runs/run-YYYY.MM.DD-HH:MM:SS/
 │   ├── pulse-taint-config.json
 │   └── summary.json
 ├── 02b_flow/
-│   ├── function_names_unique.csv
-│   ├── function_names_categorized.jsonl
-│   ├── grouped_family_role.json
 │   ├── manifest_with_testcase_flows.xml
 │   └── summary.json
 ├── 03_infer-results/
