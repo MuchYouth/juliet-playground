@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import xml.etree.ElementTree as ET
 
 from tests.golden.helpers import REPO_ROOT, load_module_from_path, prepare_workspace
 from tests.helpers import write_text
@@ -54,11 +55,18 @@ def test_stage02a_flow_aware_splits_source_and_sink_from_classified_xml(tmp_path
     assert sink_procedures == expected_sink
 
     summary = json.loads((output_dir / 'summary.json').read_text(encoding='utf-8'))
+    enriched_xml = output_dir / 'source_sink_classified_with_code.xml'
+    assert enriched_xml.exists()
+    assert result['artifacts']['source_sink_classified_with_code_xml'] == str(
+        output_dir / 'source_sink_classified_with_code.xml'
+    )
     assert summary['stats']['unique_source_function_names'] == len(expected_source)
     assert summary['stats']['unique_sink_function_names'] == len(expected_sink)
     assert summary['stats']['unique_function_names'] == len(expected_source | expected_sink)
     assert summary['stats']['pulse_source_procedures'] == len(expected_source)
     assert summary['stats']['pulse_sink_procedures'] == len(expected_sink)
+    assert 'code_backfill_attempted' in summary['stats']
+    assert 'code_backfill_failed_examples' in summary
     assert result['artifacts']['pulse_taint_config'] == str(pulse_config_path)
 
 
@@ -124,8 +132,72 @@ def test_stage02a_flow_aware_ignores_roleless_and_uses_line_fallback(tmp_path):
     assert 'ignored_call' not in source_procedures | sink_procedures
 
     summary = json.loads((output_dir / 'summary.json').read_text(encoding='utf-8'))
+    enriched_root = ET.parse(output_dir / 'source_sink_classified_with_code.xml').getroot()
+    flow_children = list(enriched_root.find('testcase').find('flow'))
+    assert flow_children[0].attrib['code'] == 'source_call();'
+    assert flow_children[1].attrib['code'] == 'sink_call();'
+    assert flow_children[2].attrib['code'] == 'ignored_call();'
     assert summary['stats']['total_code_entries'] == 2
     assert summary['stats']['candidate_map_keys'] == 2
     assert summary['stats']['keys_with_calls'] == 2
     assert summary['stats']['unique_source_function_names'] == 1
     assert summary['stats']['unique_sink_function_names'] == 1
+    assert summary['stats']['code_backfill_attempted'] == 1
+    assert summary['stats']['code_backfill_succeeded'] == 1
+    assert summary['stats']['code_backfill_failed'] == 0
+    assert summary['code_backfill_failed_examples'] == []
+
+
+def test_stage02a_flow_aware_writes_empty_code_and_warns_on_backfill_failure(tmp_path):
+    module = load_module_from_path(
+        'test_stage02a_flow_aware_backfill_failure_module',
+        REPO_ROOT / 'tools/stage/stage02a_taint.py',
+    )
+
+    source_root = tmp_path / 'juliet' / 'C'
+    (source_root / 'testcases' / 'CWE999_Test').mkdir(parents=True, exist_ok=True)
+
+    input_xml = tmp_path / 'source_sink_classified.xml'
+    write_text(
+        input_xml,
+        '\n'.join(
+            [
+                '<manifest>',
+                '  <testcase>',
+                '    <file path="CWE999_Test__missing_01.c" />',
+                '    <flow type="b2b">',
+                '      <flaw line="7" file="CWE999_Test__missing_01.c" role="source" />',
+                '    </flow>',
+                '  </testcase>',
+                '</manifest>',
+                '',
+            ]
+        ),
+    )
+
+    output_dir = tmp_path / '02a_taint'
+    module.extract_unique_code_fields(
+        input_xml=input_xml,
+        source_root=source_root,
+        output_dir=output_dir,
+        pulse_taint_config_output=output_dir / 'pulse-taint-config.json',
+    )
+
+    enriched_root = ET.parse(output_dir / 'source_sink_classified_with_code.xml').getroot()
+    item = enriched_root.find('testcase').find('flow').find('flaw')
+    assert item is not None
+    assert item.attrib['code'] == ''
+
+    summary = json.loads((output_dir / 'summary.json').read_text(encoding='utf-8'))
+    assert summary['stats']['code_backfill_attempted'] == 1
+    assert summary['stats']['code_backfill_succeeded'] == 0
+    assert summary['stats']['code_backfill_failed'] == 1
+    assert summary['code_backfill_failed_examples'] == [
+        {
+            'file': 'CWE999_Test__missing_01.c',
+            'line': 7,
+            'tag': 'flaw',
+            'role': 'source',
+            'function': '',
+        }
+    ]

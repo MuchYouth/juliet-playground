@@ -27,6 +27,9 @@ def test_build_full_run_paths_recreates_expected_layout(tmp_path):
     assert paths['stage02b_epic002']['source_sink_classified_xml'] == (
         run_dir.resolve() / '02b_flow' / 'epic002' / 'source_sink_classified.xml'
     )
+    assert paths['source_sink_classified_with_code_xml'] == (
+        run_dir.resolve() / '02a_taint' / 'source_sink_classified_with_code.xml'
+    )
     assert paths['trace']['traces_jsonl'] == run_dir.resolve() / '05_trace_ds' / 'traces.jsonl'
     assert paths['trace_slices']['slice_dir'] == run_dir.resolve() / '06_trace_slices' / 'slice'
     assert (
@@ -429,6 +432,71 @@ def test_run_step03_infer_and_signature_uses_stage_api(tmp_path, monkeypatch):
         Path(result['artifacts']['signature_non_empty_dir'])
         == paths['signatures_root'] / 'sig' / 'non_empty'
     )
+
+
+def test_run_step04_trace_flow_prefers_stage02a_enriched_xml_when_available(tmp_path, monkeypatch):
+    module = load_module_from_path(
+        'test_pipeline_step04_helper_prefers_stage02a_xml',
+        REPO_ROOT / 'tools/run_pipeline.py',
+    )
+
+    paths = module._build_full_run_paths(
+        run_dir=tmp_path / 'run', source_root=tmp_path / 'juliet' / 'C'
+    )
+    write_text(paths['source_sink_classified_with_code_xml'], '<root />\n')
+    captured: dict[str, object] = {}
+
+    def fake_filter_traces_by_flow(**kwargs):
+        captured.update(kwargs)
+        write_text(paths['trace_strict_jsonl'], '{}\n')
+        write_text(paths['trace_dir'] / 'summary.json', '{}\n')
+        return {
+            'artifacts': {'trace_flow_match_strict_jsonl': str(paths['trace_strict_jsonl'])},
+            'stats': {},
+        }
+
+    monkeypatch.setattr(
+        module._stage04_trace_flow, 'filter_traces_by_flow', fake_filter_traces_by_flow
+    )
+
+    module.run_step04_trace_flow(
+        paths=paths,
+        signature_non_empty_dir=tmp_path / 'signatures' / 'non_empty',
+    )
+
+    assert captured['flow_xml'] == paths['source_sink_classified_with_code_xml']
+
+
+def test_run_step04_trace_flow_falls_back_to_stage02b_flow_xml(tmp_path, monkeypatch):
+    module = load_module_from_path(
+        'test_pipeline_step04_helper_fallback',
+        REPO_ROOT / 'tools/run_pipeline.py',
+    )
+
+    paths = module._build_full_run_paths(
+        run_dir=tmp_path / 'run', source_root=tmp_path / 'juliet' / 'C'
+    )
+    captured: dict[str, object] = {}
+
+    def fake_filter_traces_by_flow(**kwargs):
+        captured.update(kwargs)
+        write_text(paths['trace_strict_jsonl'], '{}\n')
+        write_text(paths['trace_dir'] / 'summary.json', '{}\n')
+        return {
+            'artifacts': {'trace_flow_match_strict_jsonl': str(paths['trace_strict_jsonl'])},
+            'stats': {},
+        }
+
+    monkeypatch.setattr(
+        module._stage04_trace_flow, 'filter_traces_by_flow', fake_filter_traces_by_flow
+    )
+
+    module.run_step04_trace_flow(
+        paths=paths,
+        signature_non_empty_dir=tmp_path / 'signatures' / 'non_empty',
+    )
+
+    assert captured['flow_xml'] == paths['stage02b']['manifest_with_testcase_flows_xml']
 
 
 def test_run_step07b_train_patched_counterparts_uses_stage_api(tmp_path, monkeypatch):
