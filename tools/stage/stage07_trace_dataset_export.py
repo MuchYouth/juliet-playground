@@ -19,6 +19,10 @@ from shared.jsonio import load_jsonl, write_json, write_jsonl, write_stage_summa
 from shared.pairing import build_trace_priority_key
 from shared.signatures import stable_trace_ref
 
+from stage import stage07c_vuln_patch_export as _stage07c_vuln_patch_export
+
+DATASET_CSV_FIELDNAMES = _stage07c_vuln_patch_export.DATASET_CSV_FIELDNAMES
+
 
 def load_traces_jsonl(path: Path) -> list[dict[str, Any]]:
     rows = load_jsonl(path)
@@ -166,6 +170,41 @@ def _build_audit_row(
     }
 
 
+def _trace_dataset_row_order_key(row: dict[str, Any]) -> tuple[Any, ...]:
+    return (
+        str(row['testcase_key']),
+        0 if int(row['target']) == 1 else 1,
+        str(row.get('best_flow_type') or ''),
+        stable_trace_ref(str(row.get('trace_file') or '')),
+        str(row['trace_id']),
+    )
+
+
+def _trace_row_to_dataset_csv_record(
+    row: dict[str, Any],
+    *,
+    dataset_type: str,
+) -> dict[str, Any]:
+    return {
+        'file_name': '',
+        'unique_id': '',
+        'target': int(row['target']),
+        'vulnerable_line_numbers': 1 if int(row['target']) == 1 else '',
+        'project': 'Juliet',
+        'source_signature_path': str(row['source_signature_path']),
+        'commit_hash': '',
+        'dataset_type': str(dataset_type),
+        'processed_func': str(row['normalized_code']),
+    }
+
+
+def _dataset_csv_values(row: dict[str, Any], *, row_id: int) -> list[Any]:
+    updated = dict(row)
+    updated['file_name'] = row_id
+    updated['unique_id'] = row_id
+    return [updated[column] for column in DATASET_CSV_FIELDNAMES]
+
+
 def _apply_row_dedup(
     candidate_rows: list[dict[str, Any]],
     *,
@@ -311,31 +350,14 @@ def _write_dataset_csv_and_slices(
             encoding='utf-8',
         )
         csv_rows.append(
-            [
-                idx,
-                idx,
-                int(row['target']),
-                1 if int(row['target']) == 1 else '',
-                'Juliet',
-                str(row['source_signature_path']),
-                '',
-                str(row['dataset_type']),
-                str(row['normalized_code']),
-            ]
+            _dataset_csv_values(
+                _trace_row_to_dataset_csv_record(row, dataset_type=str(row['dataset_type'])),
+                row_id=idx,
+            )
         )
     write_csv_rows(
         csv_path,
-        [
-            'file_name',
-            'unique_id',
-            'target',
-            'vulnerable_line_numbers',
-            'project',
-            'source_signature_path',
-            'commit_hash',
-            'dataset_type',
-            'processed_func',
-        ],
+        DATASET_CSV_FIELDNAMES,
         csv_rows,
     )
 
@@ -392,9 +414,19 @@ def export_trace_dataset_from_pipeline(
     final_rows, structural_filtered, structural_audit_rows, structural_summary = (
         _apply_multi_b2b_pruning(deduped_rows)
     )
+    ordered_final_rows = sorted(final_rows, key=_trace_dataset_row_order_key)
+    vuln_patch_selection = _stage07c_vuln_patch_export.select_vuln_patch_rows(
+        source_rows=ordered_final_rows,
+    )
+    vuln_patch_testcase_keys = set(vuln_patch_selection['selected_testcase_keys'])
+    main_rows = [
+        row
+        for row in ordered_final_rows
+        if str(row['testcase_key']) not in vuln_patch_testcase_keys
+    ]
 
     testcase_split_assignments = compute_testcase_split(
-        [str(row['testcase_key']) for row in final_rows],
+        [str(row['testcase_key']) for row in main_rows],
         train_ratio=train_ratio,
         seed=split_seed,
     )
@@ -410,15 +442,7 @@ def export_trace_dataset_from_pipeline(
         )
         testcase_keys_by_dataset_type[dataset_type] = testcase_keys
         for testcase_key in testcase_keys:
-            testcase_rows = sorted(
-                [row for row in final_rows if str(row['testcase_key']) == testcase_key],
-                key=lambda row: (
-                    0 if int(row['target']) == 1 else 1,
-                    str(row.get('best_flow_type') or ''),
-                    stable_trace_ref(str(row.get('trace_file') or '')),
-                    str(row['trace_id']),
-                ),
-            )
+            testcase_rows = [row for row in main_rows if str(row['testcase_key']) == testcase_key]
             for row in testcase_rows:
                 trace_ids_by_dataset_type[dataset_type].append(str(row['trace_id']))
                 row_with_split = dict(row)
@@ -430,10 +454,19 @@ def export_trace_dataset_from_pipeline(
         csv_path=export_paths['csv_path'],
         normalized_slices_dir=export_paths['normalized_slices_dir'],
     )
+    vuln_patch_result = _stage07c_vuln_patch_export.write_vuln_patch_dataset(
+        rows=[
+            _trace_row_to_dataset_csv_record(row, dataset_type='test')
+            for row in vuln_patch_selection['selected_rows']
+        ],
+        output_dir=export_paths['output_dir'] / 'vuln_patch',
+        stats=vuln_patch_selection['stats'],
+        fieldnames=DATASET_CSV_FIELDNAMES,
+    )
 
     split_manifest = {
         'counts': {
-            'traces_total': len(final_rows),
+            'traces_total': len(main_rows),
             'train_val_traces': len(trace_ids_by_dataset_type['train_val']),
             'test_traces': len(trace_ids_by_dataset_type['test']),
             'train_val_testcases': len(testcase_keys_by_dataset_type['train_val']),
@@ -457,6 +490,8 @@ def export_trace_dataset_from_pipeline(
 
     artifacts = path_strings(export_paths)
     artifacts['trace_dedup_dropped_jsonl'] = str(dropped_audit_path)
+    artifacts['vuln_patch_csv_path'] = str(vuln_patch_result['artifacts']['csv_path'])
+    artifacts['vuln_patch_summary_json'] = str(vuln_patch_result['artifacts']['summary_json'])
     stats = {
         'mode': 'trace_first',
         'dedup': dedup_summary,
@@ -464,10 +499,16 @@ def export_trace_dataset_from_pipeline(
         'filtered_trace_reasons': {
             key: value for key, value in combined_filtered_reasons.items() if key != 'traces_total'
         },
+        'vuln_patch_holdout': {
+            'testcases_selected': len(vuln_patch_selection['selected_testcase_keys']),
+            'rows_written': len(vuln_patch_selection['selected_rows']),
+            'rows_removed_from_main_dataset': len(final_rows) - len(main_rows),
+        },
         'counts': {
             'traces_total': len(trace_rows),
             'candidate_rows': len(candidate_rows),
-            'traces_survived': len(final_rows),
+            'traces_survived_pre_vuln_patch_holdout': len(final_rows),
+            'traces_survived': len(main_rows),
             'traces_filtered_out': filtered_total,
             'rows_written': len(ordered_rows),
             'train_val_traces': len(trace_ids_by_dataset_type['train_val']),

@@ -7,6 +7,18 @@ from typing import Any
 
 from shared.jsonio import write_stage_summary
 
+DATASET_CSV_FIELDNAMES = [
+    'file_name',
+    'unique_id',
+    'target',
+    'vulnerable_line_numbers',
+    'project',
+    'source_signature_path',
+    'commit_hash',
+    'dataset_type',
+    'processed_func',
+]
+
 
 def build_vuln_patch_paths(output_dir: Path) -> dict[str, Path]:
     output_dir = Path(output_dir)
@@ -18,6 +30,9 @@ def build_vuln_patch_paths(output_dir: Path) -> dict[str, Path]:
 
 
 def testcase_key_from_row(row: dict[str, str]) -> str:
+    testcase_key = str(row.get('testcase_key') or '').strip()
+    if testcase_key:
+        return testcase_key
     source_signature_path = str(row.get('source_signature_path') or '').strip()
     if not source_signature_path:
         return ''
@@ -49,25 +64,39 @@ def _renumber_row(row: dict[str, str], *, row_id: int) -> dict[str, str]:
     return updated
 
 
-def export_vuln_patch_dataset(
+def _build_selection_stats(
     *,
-    source_csv_path: Path,
-    output_dir: Path,
+    source_rows_total: int,
+    source_testcases_total: int,
+    skipped_rows: int,
+    selection_counts: Counter[str],
+    counterpart_count_distribution: Counter[str],
+    selected_testcases: list[dict[str, Any]],
 ) -> dict[str, Any]:
-    if not source_csv_path.exists():
-        raise FileNotFoundError(f'Source dataset CSV not found: {source_csv_path}')
+    return {
+        'selection_policy': 'first_counterpart_in_existing_csv_order',
+        'counts': {
+            'source_rows_total': source_rows_total,
+            'source_testcases_total': source_testcases_total,
+            'rows_skipped_missing_testcase_key': skipped_rows,
+            'eligible_testcases': int(selection_counts['eligible_testcases']),
+            'rows_written': len(selected_testcases) * 2,
+        },
+        'ineligible_testcase_reasons': {
+            'missing_b2b': int(selection_counts['missing_b2b']),
+            'multi_b2b': int(selection_counts['multi_b2b']),
+            'counterpart_lt2': int(selection_counts['counterpart_lt2']),
+        },
+        'counterpart_count_distribution': dict(counterpart_count_distribution),
+        'selected_testcases': selected_testcases,
+    }
 
-    paths = build_vuln_patch_paths(output_dir)
-    paths['output_dir'].mkdir(parents=True, exist_ok=True)
 
-    with source_csv_path.open('r', encoding='utf-8', newline='') as f:
-        reader = csv.DictReader(f)
-        fieldnames = list(reader.fieldnames or [])
-        if not fieldnames:
-            raise ValueError(f'Failed to read CSV header from {source_csv_path}')
-        source_rows = list(reader)
-
-    rows_by_testcase: dict[str, list[dict[str, str]]] = defaultdict(list)
+def select_vuln_patch_rows(
+    *,
+    source_rows: list[dict[str, Any]],
+) -> dict[str, Any]:
+    rows_by_testcase: dict[str, list[dict[str, Any]]] = defaultdict(list)
     skipped_rows = 0
     for row in source_rows:
         testcase_key = testcase_key_from_row(row)
@@ -76,15 +105,17 @@ def export_vuln_patch_dataset(
             continue
         rows_by_testcase[testcase_key].append(row)
 
-    selected_rows: list[dict[str, str]] = []
+    selected_rows: list[dict[str, Any]] = []
     selection_counts = Counter()
     counterpart_count_distribution = Counter()
     selected_testcases: list[dict[str, Any]] = []
 
     for testcase_key in sorted(rows_by_testcase):
         testcase_rows = rows_by_testcase[testcase_key]
-        b2b_rows = [row for row in testcase_rows if str(row.get('target') or '') == '1']
-        counterpart_rows = [row for row in testcase_rows if str(row.get('target') or '') == '0']
+        b2b_rows = [row for row in testcase_rows if str(row.get('target', '')).strip() == '1']
+        counterpart_rows = [
+            row for row in testcase_rows if str(row.get('target', '')).strip() == '0'
+        ]
 
         if not b2b_rows:
             selection_counts['missing_b2b'] += 1
@@ -111,29 +142,62 @@ def export_vuln_patch_dataset(
             )
         )
 
+    stats = _build_selection_stats(
+        source_rows_total=len(source_rows),
+        source_testcases_total=len(rows_by_testcase),
+        skipped_rows=skipped_rows,
+        selection_counts=selection_counts,
+        counterpart_count_distribution=counterpart_count_distribution,
+        selected_testcases=selected_testcases,
+    )
+    return {
+        'selected_rows': selected_rows,
+        'selected_testcase_keys': [item['testcase_key'] for item in selected_testcases],
+        'stats': stats,
+    }
+
+
+def write_vuln_patch_dataset(
+    *,
+    rows: list[dict[str, Any]],
+    output_dir: Path,
+    stats: dict[str, Any],
+    fieldnames: list[str] | None = None,
+) -> dict[str, Any]:
+    paths = build_vuln_patch_paths(output_dir)
+    paths['output_dir'].mkdir(parents=True, exist_ok=True)
+
+    output_fieldnames = list(fieldnames or DATASET_CSV_FIELDNAMES)
     with paths['csv_path'].open('w', encoding='utf-8', newline='') as f:
-        writer = csv.DictWriter(f, fieldnames=fieldnames)
+        writer = csv.DictWriter(f, fieldnames=output_fieldnames)
         writer.writeheader()
-        for row_id, row in enumerate(selected_rows, start=1):
+        for row_id, row in enumerate(rows, start=1):
             writer.writerow(_renumber_row(row, row_id=row_id))
 
     artifacts = {key: str(value) for key, value in paths.items()}
-    stats = {
-        'selection_policy': 'first_counterpart_in_existing_csv_order',
-        'counts': {
-            'source_rows_total': len(source_rows),
-            'source_testcases_total': len(rows_by_testcase),
-            'rows_skipped_missing_testcase_key': skipped_rows,
-            'eligible_testcases': int(selection_counts['eligible_testcases']),
-            'rows_written': len(selected_rows),
-        },
-        'ineligible_testcase_reasons': {
-            'missing_b2b': int(selection_counts['missing_b2b']),
-            'multi_b2b': int(selection_counts['multi_b2b']),
-            'counterpart_lt2': int(selection_counts['counterpart_lt2']),
-        },
-        'counterpart_count_distribution': dict(counterpart_count_distribution),
-        'selected_testcases': selected_testcases,
-    }
     write_stage_summary(paths['summary_json'], artifacts=artifacts, stats=stats)
     return {'artifacts': artifacts, 'stats': stats}
+
+
+def export_vuln_patch_dataset(
+    *,
+    source_csv_path: Path,
+    output_dir: Path,
+) -> dict[str, Any]:
+    if not source_csv_path.exists():
+        raise FileNotFoundError(f'Source dataset CSV not found: {source_csv_path}')
+
+    with source_csv_path.open('r', encoding='utf-8', newline='') as f:
+        reader = csv.DictReader(f)
+        fieldnames = list(reader.fieldnames or [])
+        if not fieldnames:
+            raise ValueError(f'Failed to read CSV header from {source_csv_path}')
+        source_rows = list(reader)
+
+    selection = select_vuln_patch_rows(source_rows=source_rows)
+    return write_vuln_patch_dataset(
+        rows=selection['selected_rows'],
+        output_dir=output_dir,
+        stats=selection['stats'],
+        fieldnames=fieldnames,
+    )

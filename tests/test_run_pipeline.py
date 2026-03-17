@@ -290,10 +290,14 @@ def test_full_subcommand_disable_pair_runs_trace_first_orchestration(monkeypatch
     def fake_export_trace_dataset(**kwargs):
         called.append('07_trace_dataset_export')
         (kwargs['output_dir'] / 'normalized_slices').mkdir(parents=True, exist_ok=True)
+        vuln_patch_dir = kwargs['output_dir'] / 'vuln_patch'
+        vuln_patch_dir.mkdir(parents=True, exist_ok=True)
         for output_path in [
             kwargs['output_dir'] / 'Real_Vul_data.csv',
             kwargs['output_dir'] / 'split_manifest.json',
             kwargs['output_dir'] / 'summary.json',
+            vuln_patch_dir / 'Real_Vul_data.csv',
+            vuln_patch_dir / 'summary.json',
         ]:
             write_text(output_path, 'ok\n')
         return {
@@ -301,25 +305,8 @@ def test_full_subcommand_disable_pair_runs_trace_first_orchestration(monkeypatch
             'stats': {},
         }
 
-    def fake_export_vuln_patch_dataset(**kwargs):
-        called.append('07c_vuln_patch_export')
-        output_dir = kwargs['output_dir']
-        output_dir.mkdir(parents=True, exist_ok=True)
-        for output_path in [
-            output_dir / 'Real_Vul_data.csv',
-            output_dir / 'summary.json',
-        ]:
-            write_text(output_path, 'ok\n')
-        return {
-            'artifacts': {
-                'csv_path': str(output_dir / 'Real_Vul_data.csv'),
-                'summary_json': str(output_dir / 'summary.json'),
-            },
-            'stats': {},
-        }
-
     def fail_if_called(**kwargs):  # pragma: no cover - safety assertion
-        raise AssertionError(f'Unexpected patched export call: {kwargs}')
+        raise AssertionError(f'Unexpected export call: {kwargs}')
 
     monkeypatch.setattr(
         module._stage01_manifest, 'scan_manifest_comments', fake_scan_manifest_comments
@@ -342,7 +329,7 @@ def test_full_subcommand_disable_pair_runs_trace_first_orchestration(monkeypatch
         module._stage06_trace_slices, 'generate_trace_slices', fake_generate_trace_slices
     )
     monkeypatch.setattr(module, 'export_trace_dataset_from_pipeline', fake_export_trace_dataset)
-    monkeypatch.setattr(module, 'export_vuln_patch_dataset', fake_export_vuln_patch_dataset)
+    monkeypatch.setattr(module, 'export_vuln_patch_dataset', fail_if_called)
     monkeypatch.setattr(module, 'export_patched_dataset', fail_if_called)
 
     result = run_module_main(
@@ -375,7 +362,6 @@ def test_full_subcommand_disable_pair_runs_trace_first_orchestration(monkeypatch
         '05_trace_dataset',
         '06_trace_slices',
         '07_trace_dataset_export',
-        '07c_vuln_patch_export',
     ]
 
     run_dir = pipeline_root / 'run-trace'
@@ -565,6 +551,9 @@ def test_full_subcommand_can_disable_epic002_and_keep_legacy_order(monkeypatch, 
     def fail_epic002(**kwargs):  # pragma: no cover - safety assertion
         raise AssertionError(f'Unexpected epic002 classification call: {kwargs}')
 
+    def fail_unexpected_export(**kwargs):  # pragma: no cover - safety assertion
+        raise AssertionError(f'Unexpected export call: {kwargs}')
+
     def fake_run_infer_and_signature(**kwargs):
         called.append('03_infer_and_signature')
         signature_non_empty_dir = (
@@ -611,31 +600,18 @@ def test_full_subcommand_can_disable_epic002_and_keep_legacy_order(monkeypatch, 
     def fake_export_trace_dataset(**kwargs):
         called.append('07_trace_dataset_export')
         (kwargs['output_dir'] / 'normalized_slices').mkdir(parents=True, exist_ok=True)
+        vuln_patch_dir = kwargs['output_dir'] / 'vuln_patch'
+        vuln_patch_dir.mkdir(parents=True, exist_ok=True)
         for output_path in [
             kwargs['output_dir'] / 'Real_Vul_data.csv',
             kwargs['output_dir'] / 'split_manifest.json',
             kwargs['output_dir'] / 'summary.json',
+            vuln_patch_dir / 'Real_Vul_data.csv',
+            vuln_patch_dir / 'summary.json',
         ]:
             write_text(output_path, 'ok\n')
         return {
             'artifacts': {'summary_json': str(kwargs['output_dir'] / 'summary.json')},
-            'stats': {},
-        }
-
-    def fake_export_vuln_patch_dataset(**kwargs):
-        called.append('07c_vuln_patch_export')
-        output_dir = kwargs['output_dir']
-        output_dir.mkdir(parents=True, exist_ok=True)
-        for output_path in [
-            output_dir / 'Real_Vul_data.csv',
-            output_dir / 'summary.json',
-        ]:
-            write_text(output_path, 'ok\n')
-        return {
-            'artifacts': {
-                'csv_path': str(output_dir / 'Real_Vul_data.csv'),
-                'summary_json': str(output_dir / 'summary.json'),
-            },
             'stats': {},
         }
 
@@ -660,7 +636,7 @@ def test_full_subcommand_can_disable_epic002_and_keep_legacy_order(monkeypatch, 
         module._stage06_trace_slices, 'generate_trace_slices', fake_generate_trace_slices
     )
     monkeypatch.setattr(module, 'export_trace_dataset_from_pipeline', fake_export_trace_dataset)
-    monkeypatch.setattr(module, 'export_vuln_patch_dataset', fake_export_vuln_patch_dataset)
+    monkeypatch.setattr(module, 'export_vuln_patch_dataset', fail_unexpected_export)
 
     result = run_module_main(
         module,
@@ -692,5 +668,4 @@ def test_full_subcommand_can_disable_epic002_and_keep_legacy_order(monkeypatch, 
         '05_trace_dataset',
         '06_trace_slices',
         '07_trace_dataset_export',
-        '07c_vuln_patch_export',
     ]

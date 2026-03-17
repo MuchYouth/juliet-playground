@@ -301,10 +301,14 @@ def test_run_step07_trace_dataset_export_uses_trace_dataset_api(tmp_path, monkey
     def fake_export_trace_dataset_from_pipeline(**kwargs):
         captured.update(kwargs)
         paths['dataset']['normalized_slices_dir'].mkdir(parents=True, exist_ok=True)
+        vuln_patch_dir = paths['dataset']['output_dir'] / 'vuln_patch'
+        vuln_patch_dir.mkdir(parents=True, exist_ok=True)
         for output_path in [
             paths['dataset']['csv_path'],
             paths['dataset']['split_manifest_json'],
             paths['dataset']['summary_json'],
+            vuln_patch_dir / 'Real_Vul_data.csv',
+            vuln_patch_dir / 'summary.json',
         ]:
             write_text(output_path, 'ok\n')
         return {
@@ -313,6 +317,8 @@ def test_run_step07_trace_dataset_export_uses_trace_dataset_api(tmp_path, monkey
                 'normalized_slices_dir': str(paths['dataset']['normalized_slices_dir']),
                 'split_manifest_json': str(paths['dataset']['split_manifest_json']),
                 'summary_json': str(paths['dataset']['summary_json']),
+                'vuln_patch_csv_path': str(vuln_patch_dir / 'Real_Vul_data.csv'),
+                'vuln_patch_summary_json': str(vuln_patch_dir / 'summary.json'),
             },
             'stats': {'counts': {'traces_total': 1}},
         }

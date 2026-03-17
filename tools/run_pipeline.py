@@ -415,6 +415,14 @@ def run_step07_trace_dataset_export(
     )
     for key in ('csv_path', 'normalized_slices_dir', 'split_manifest_json', 'summary_json'):
         _require_exists(paths['dataset'][key], f'07_dataset_export/{key}')
+    _require_exists(
+        Path(paths['dataset']['output_dir']) / 'vuln_patch' / 'Real_Vul_data.csv',
+        '07_dataset_export/vuln_patch/csv_path',
+    )
+    _require_exists(
+        Path(paths['dataset']['output_dir']) / 'vuln_patch' / 'summary.json',
+        '07_dataset_export/vuln_patch/summary_json',
+    )
     return result
 
 
@@ -524,7 +532,6 @@ def run_full_pipeline(config: FullRunConfig) -> int:
                 pair_train_ratio=config.pair_train_ratio,
                 dedup_mode=config.dedup_mode,
             )
-            run_step07c_vuln_patch_export(paths=paths)
     except Exception as exc:
         print(str(exc), file=sys.stderr)
         return 1

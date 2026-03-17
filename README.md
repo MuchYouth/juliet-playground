@@ -121,7 +121,7 @@ source .venv/bin/activate && python tools/run_pipeline.py full --all
 7. `06_slices` 또는 `06_trace_slices`: pair signature 또는 trace bug trace를 소스 slice로 변환
 8. `07_dataset_export`: normalize / dedup / token filtering / split / CSV export
 9. `07b`: pair 모드에서만 train patched counterpart 평가용 export 추가 생성
-10. `vuln_patch`: disable-pair 모드에서만 평가용 vuln/patch CSV 생성
+10. `vuln_patch`: disable-pair 모드에서만 메인 CSV에서 분리된 평가용 vuln/patch holdout CSV 생성
 
 ### Flow XML note
 
