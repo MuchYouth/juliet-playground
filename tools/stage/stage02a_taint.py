@@ -61,6 +61,9 @@ class TaintInventoryCore:
     flaw_records_processed: int
     macro_defs: dict[str, list[MacroDefinition]]
     resolution_map: dict[str, ResolutionResult]
+    mode: str = 'legacy'
+    source_function_name_counts: Counter[str] | None = None
+    sink_function_name_counts: Counter[str] | None = None
 
 
 def _build_line_nodes(root_node) -> dict[int, list[object]]:
@@ -155,6 +158,13 @@ def _derive_flaw_key(ctx: FileContext, line_no: int) -> str:
             return text
     line_text = _fallback_line_text(ctx, line_no)
     return line_text if line_text else 'WARNING_FLAW_CODE_NOT_FOUND'
+
+
+def _derive_line_text_key(ctx: FileContext, line_no: int) -> str:
+    line_text = _fallback_line_text(ctx, line_no)
+    if line_text:
+        return line_text
+    return _derive_flaw_key(ctx, line_no)
 
 
 def _collect_macro_definitions(source_root: Path) -> dict[str, list[MacroDefinition]]:
@@ -271,6 +281,42 @@ def _count_function_names(candidate_map: dict[str, list[dict[str, int | str]]]) 
     return name_counts
 
 
+def _get_or_load_file_context(
+    *,
+    file_name: str,
+    source_index: dict[str, Path],
+    parsers: dict[str, object],
+    cache: dict[str, FileContext | None],
+) -> FileContext | None:
+    if file_name not in cache:
+        src = source_index.get(file_name)
+        cache[file_name] = _load_file_context(src, parsers) if src is not None else None
+    return cache[file_name]
+
+
+def _build_record_candidate_entry(
+    *,
+    ctx: FileContext | None,
+    line_no: int,
+    key: str,
+) -> list[dict[str, int | str]]:
+    if ctx is None:
+        return []
+    chosen = _choose_node(ctx.line_nodes, ctx.source_bytes, line_no, target_text=key)
+    if chosen is None:
+        return []
+    return _extract_calls(chosen, ctx.source_bytes, line_no)
+
+
+def _manifest_has_flow_roles(root: ET.Element) -> bool:
+    return any(
+        child.attrib.get('role') in {'source', 'sink'}
+        for flow in root.iter('flow')
+        for child in flow
+        if child.tag in {'fix', 'flaw'}
+    )
+
+
 def _write_macro_resolution_csv(
     output_dir: Path, resolution_map: dict[str, ResolutionResult]
 ) -> dict[str, int]:
@@ -328,59 +374,70 @@ def _build_macro_resolution_stats(resolution_map: dict[str, ResolutionResult]) -
     }
 
 
-def _build_pulse_taint_config(function_names: list[str]) -> dict[str, list[dict[str, str]]]:
-    all_names = sorted(function_names)
+def _build_pulse_taint_config(
+    source_function_names: list[str],
+    sink_function_names: list[str] | None = None,
+) -> dict[str, list[dict[str, str]]]:
+    all_source_names = sorted(source_function_names)
+    all_sink_names = sorted(
+        sink_function_names if sink_function_names is not None else source_function_names
+    )
     return {
         'pulse-taint-sources': [
             record
-            for name in all_names
+            for name in all_source_names
             for record in (
                 {'procedure': name, 'taint_target': 'ReturnValue'},
                 {'procedure': name, 'taint_target': 'AllArguments'},
             )
         ],
         'pulse-taint-sinks': [
-            {'procedure': name, 'taint_target': 'AllArguments'} for name in all_names
+            {'procedure': name, 'taint_target': 'AllArguments'} for name in all_sink_names
         ],
     }
 
 
 def _write_pulse_taint_config(
-    output_path: Path, function_name_counts: Counter[str]
+    output_path: Path,
+    source_function_name_counts: Counter[str],
+    sink_function_name_counts: Counter[str] | None = None,
 ) -> dict[str, int]:
-    function_names = sorted(function_name_counts)
-    config = _build_pulse_taint_config(function_names)
+    source_function_names = sorted(source_function_name_counts)
+    sink_function_names = (
+        sorted(sink_function_name_counts)
+        if sink_function_name_counts is not None
+        else source_function_names
+    )
+    config = _build_pulse_taint_config(source_function_names, sink_function_names)
     write_json(output_path, config)
     return {
-        'pulse_source_procedures': len(config['pulse-taint-sources']) // 2,
+        'pulse_source_procedures': len(source_function_names),
         'pulse_sink_procedures': len(config['pulse-taint-sinks']),
     }
 
 
-def build_taint_inventory_core(*, input_xml: Path, source_root: Path) -> TaintInventoryCore:
-    if not input_xml.exists():
-        raise FileNotFoundError(f'Input XML not found: {input_xml}')
-    if not source_root.exists():
-        raise FileNotFoundError(f'Source root not found: {source_root}')
-
-    parsers = load_tree_sitter_parsers()
-    source_index = build_manifest_source_index(
-        manifest_xml=input_xml,
-        source_root=source_root,
-        suffixes=SOURCE_EXTS,
-    )
-    root = ET.parse(input_xml).getroot()
-
+def _build_legacy_taint_inventory_core(
+    *,
+    root: ET.Element,
+    source_index: dict[str, Path],
+    parsers: dict[str, object],
+    source_root: Path,
+) -> TaintInventoryCore:
     all_comment_codes: list[str] = []
     counts: Counter[str] = Counter()
     candidate_map_raw: dict[str, list[dict[str, int | str]]] = {}
     duplicate_key_skipped = 0
     flaw_records_processed = 0
+    ctx_cache: dict[str, FileContext | None] = {}
 
     for file_elem in root.iter('file'):
         file_name = file_elem.attrib.get('path', '')
-        src = source_index.get(file_name)
-        ctx = _load_file_context(src, parsers) if src is not None else None
+        ctx = _get_or_load_file_context(
+            file_name=file_name,
+            source_index=source_index,
+            parsers=parsers,
+            cache=ctx_cache,
+        )
 
         for child in list(file_elem):
             tag = child.tag
@@ -405,16 +462,9 @@ def build_taint_inventory_core(*, input_xml: Path, source_root: Path) -> TaintIn
                 duplicate_key_skipped += 1
                 continue
 
-            if ctx is None:
-                candidate_map_raw[key] = []
-                continue
-
-            chosen = _choose_node(ctx.line_nodes, ctx.source_bytes, line_no, target_text=key)
-            if chosen is None:
-                candidate_map_raw[key] = []
-                continue
-
-            candidate_map_raw[key] = _extract_calls(chosen, ctx.source_bytes, line_no)
+            candidate_map_raw[key] = _build_record_candidate_entry(
+                ctx=ctx, line_no=line_no, key=key
+            )
 
     raw_function_names: set[str] = {
         str(call.get('name', '')).strip()
@@ -425,16 +475,147 @@ def build_taint_inventory_core(*, input_xml: Path, source_root: Path) -> TaintIn
     macro_defs = _collect_macro_definitions(source_root)
     resolution_map = _build_resolution_map(raw_function_names, macro_defs)
     candidate_map = _apply_resolution_to_candidate_map(candidate_map_raw, resolution_map)
+    function_name_counts = _count_function_names(candidate_map)
 
     return TaintInventoryCore(
         all_comment_codes=all_comment_codes,
         counts=counts,
         candidate_map=candidate_map,
-        function_name_counts=_count_function_names(candidate_map),
+        function_name_counts=function_name_counts,
         duplicate_key_skipped=duplicate_key_skipped,
         flaw_records_processed=flaw_records_processed,
         macro_defs=macro_defs,
         resolution_map=resolution_map,
+    )
+
+
+def _build_flow_aware_taint_inventory_core(
+    *,
+    root: ET.Element,
+    source_index: dict[str, Path],
+    parsers: dict[str, object],
+    source_root: Path,
+) -> TaintInventoryCore:
+    all_comment_codes: list[str] = []
+    counts: Counter[str] = Counter()
+    source_candidate_map_raw: dict[str, list[dict[str, int | str]]] = {}
+    sink_candidate_map_raw: dict[str, list[dict[str, int | str]]] = {}
+    duplicate_key_skipped = 0
+    flaw_records_processed = 0
+    ctx_cache: dict[str, FileContext | None] = {}
+
+    for testcase in root.findall('testcase'):
+        for flow in testcase.findall('flow'):
+            for child in flow:
+                if child.tag not in {'fix', 'flaw'}:
+                    continue
+
+                role = child.attrib.get('role')
+                if role not in {'source', 'sink'}:
+                    continue
+
+                file_name = child.attrib.get('file', '')
+                ctx = _get_or_load_file_context(
+                    file_name=file_name,
+                    source_index=source_index,
+                    parsers=parsers,
+                    cache=ctx_cache,
+                )
+                line_no = int(child.attrib.get('line', '0') or 0)
+                explicit_code = child.attrib.get('code') or None
+                key = (
+                    explicit_code
+                    if explicit_code is not None
+                    else (
+                        'WARNING_FLAW_CODE_NOT_FOUND'
+                        if ctx is None
+                        else _derive_line_text_key(ctx, line_no)
+                    )
+                )
+
+                all_comment_codes.append(key)
+                counts[key] += 1
+                if child.tag == 'flaw':
+                    flaw_records_processed += 1
+
+                candidate_map_raw = (
+                    source_candidate_map_raw if role == 'source' else sink_candidate_map_raw
+                )
+                if key in candidate_map_raw:
+                    duplicate_key_skipped += 1
+                    continue
+
+                candidate_map_raw[key] = _build_record_candidate_entry(
+                    ctx=ctx,
+                    line_no=line_no,
+                    key=key,
+                )
+
+    raw_function_names: set[str] = {
+        str(call.get('name', '')).strip()
+        for candidate_map_raw in (source_candidate_map_raw, sink_candidate_map_raw)
+        for calls in candidate_map_raw.values()
+        for call in calls
+        if str(call.get('name', '')).strip()
+    }
+    macro_defs = _collect_macro_definitions(source_root)
+    resolution_map = _build_resolution_map(raw_function_names, macro_defs)
+    source_candidate_map = _apply_resolution_to_candidate_map(
+        source_candidate_map_raw,
+        resolution_map,
+    )
+    sink_candidate_map = _apply_resolution_to_candidate_map(
+        sink_candidate_map_raw,
+        resolution_map,
+    )
+    source_function_name_counts = _count_function_names(source_candidate_map)
+    sink_function_name_counts = _count_function_names(sink_candidate_map)
+    candidate_map = {
+        **{f'source::{key}': value for key, value in source_candidate_map.items()},
+        **{f'sink::{key}': value for key, value in sink_candidate_map.items()},
+    }
+
+    return TaintInventoryCore(
+        all_comment_codes=all_comment_codes,
+        counts=counts,
+        candidate_map=candidate_map,
+        function_name_counts=source_function_name_counts + sink_function_name_counts,
+        duplicate_key_skipped=duplicate_key_skipped,
+        flaw_records_processed=flaw_records_processed,
+        macro_defs=macro_defs,
+        resolution_map=resolution_map,
+        mode='flow_aware',
+        source_function_name_counts=source_function_name_counts,
+        sink_function_name_counts=sink_function_name_counts,
+    )
+
+
+def build_taint_inventory_core(*, input_xml: Path, source_root: Path) -> TaintInventoryCore:
+    if not input_xml.exists():
+        raise FileNotFoundError(f'Input XML not found: {input_xml}')
+    if not source_root.exists():
+        raise FileNotFoundError(f'Source root not found: {source_root}')
+
+    parsers = load_tree_sitter_parsers()
+    source_index = build_manifest_source_index(
+        manifest_xml=input_xml,
+        source_root=source_root,
+        suffixes=SOURCE_EXTS,
+    )
+    root = ET.parse(input_xml).getroot()
+    if _manifest_has_flow_roles(root):
+        return _build_flow_aware_taint_inventory_core(
+            root=root,
+            source_index=source_index,
+            parsers=parsers,
+            source_root=source_root,
+        )
+
+    return _build_legacy_taint_inventory_core(
+        root=root,
+        source_index=source_index,
+        parsers=parsers,
+        source_root=source_root,
     )
 
 
@@ -451,7 +632,11 @@ def extract_unique_code_fields(
     _write_macro_resolution_csv(output_dir, core.resolution_map)
 
     pulse_output_path = pulse_taint_config_output or (output_dir / DEFAULT_PULSE_TAINT_CONFIG_NAME)
-    pulse_stats = _write_pulse_taint_config(pulse_output_path, core.function_name_counts)
+    pulse_stats = _write_pulse_taint_config(
+        pulse_output_path,
+        core.source_function_name_counts or core.function_name_counts,
+        core.sink_function_name_counts,
+    )
 
     artifacts = {
         'pulse_taint_config': str(pulse_output_path),
@@ -469,5 +654,8 @@ def extract_unique_code_fields(
         'flaw_records_processed': core.flaw_records_processed,
         **pulse_stats,
     }
+    if core.mode == 'flow_aware':
+        stats['unique_source_function_names'] = len(core.source_function_name_counts or Counter())
+        stats['unique_sink_function_names'] = len(core.sink_function_name_counts or Counter())
     write_stage_summary(output_dir / 'summary.json', artifacts=artifacts, stats=stats, echo=False)
     return {'artifacts': artifacts, 'stats': stats}

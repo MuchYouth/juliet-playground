@@ -98,7 +98,8 @@ from __future__ import annotations
         )
         pulse_stats = _stage02a_taint._write_pulse_taint_config(
             pulse_output_path,
-            core.function_name_counts,
+            core.source_function_name_counts or core.function_name_counts,
+            core.sink_function_name_counts,
         )
 
         artifacts = {
