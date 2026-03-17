@@ -231,6 +231,46 @@ def test_run_step07_trace_dataset_export_uses_trace_dataset_api(tmp_path, monkey
     )
 
 
+def test_run_step07c_vuln_patch_export_uses_vuln_patch_api(tmp_path, monkeypatch):
+    module = load_module_from_path(
+        'test_pipeline_step07c_vuln_patch_helper',
+        REPO_ROOT / 'tools/run_pipeline.py',
+    )
+
+    paths = module._build_full_run_paths(
+        run_dir=tmp_path / 'run', source_root=tmp_path / 'juliet' / 'C'
+    )
+    write_text(
+        paths['dataset']['csv_path'],
+        'file_name,unique_id,target,vulnerable_line_numbers,project,source_signature_path,commit_hash,dataset_type,processed_func\n',
+    )
+    captured: dict[str, object] = {}
+
+    def fake_export_vuln_patch_dataset(**kwargs):
+        captured.update(kwargs)
+        output_dir = kwargs['output_dir']
+        output_dir.mkdir(parents=True, exist_ok=True)
+        write_text(output_dir / 'Real_Vul_data.csv', 'ok\n')
+        write_text(output_dir / 'summary.json', 'ok\n')
+        return {
+            'artifacts': {
+                'csv_path': str(output_dir / 'Real_Vul_data.csv'),
+                'summary_json': str(output_dir / 'summary.json'),
+            },
+            'stats': {'counts': {'eligible_testcases': 1}},
+        }
+
+    monkeypatch.setattr(module, 'export_vuln_patch_dataset', fake_export_vuln_patch_dataset)
+
+    result = module.run_step07c_vuln_patch_export(paths=paths)
+
+    assert captured['source_csv_path'] == paths['dataset']['csv_path']
+    assert captured['output_dir'] == paths['dataset']['output_dir'] / 'vuln_patch'
+    assert result['artifacts']['summary_json'] == str(
+        paths['dataset']['output_dir'] / 'vuln_patch' / 'summary.json'
+    )
+
+
 def test_run_step03_infer_and_signature_uses_stage_api(tmp_path, monkeypatch):
     module = load_module_from_path(
         'test_pipeline_step03_helper',

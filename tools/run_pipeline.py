@@ -30,10 +30,12 @@ from stage import stage06_trace_slices as _stage06_trace_slices
 from stage import stage07_dataset_export as _stage07_dataset_export
 from stage import stage07_trace_dataset_export as _stage07_trace_dataset_export
 from stage import stage07b_patched_export as _stage07b_patched_export
+from stage import stage07c_vuln_patch_export as _stage07c_vuln_patch_export
 
 compute_pair_split = _stage07_dataset_export.compute_pair_split
 export_dataset_from_pipeline = _stage07_dataset_export.export_dataset_from_pipeline
 export_primary_dataset = _stage07_dataset_export.export_primary_dataset
+export_vuln_patch_dataset = _stage07c_vuln_patch_export.export_vuln_patch_dataset
 export_trace_dataset_from_pipeline = (
     _stage07_trace_dataset_export.export_trace_dataset_from_pipeline
 )
@@ -391,6 +393,17 @@ def run_step07b_train_patched_counterparts(
     return result
 
 
+def run_step07c_vuln_patch_export(*, paths: dict[str, object]) -> dict[str, object]:
+    output_dir = Path(paths['dataset']['output_dir']) / 'vuln_patch'
+    result = export_vuln_patch_dataset(
+        source_csv_path=paths['dataset']['csv_path'],
+        output_dir=output_dir,
+    )
+    for key in ('csv_path', 'summary_json'):
+        _require_exists(Path(result['artifacts'][key]), f'vuln_patch/{key}')
+    return result
+
+
 def run_full_pipeline(config: FullRunConfig) -> int:
     _validate_full_inputs(config)
     config = _normalize_full_run_config(config)
@@ -449,7 +462,7 @@ def run_full_pipeline(config: FullRunConfig) -> int:
                 pair_train_ratio=config.pair_train_ratio,
                 dedup_mode=config.dedup_mode,
             )
-            print('Skipping 07b_train_patched_counterparts_export because --disable-pair is set.')
+            run_step07c_vuln_patch_export(paths=paths)
     except Exception as exc:
         print(str(exc), file=sys.stderr)
         return 1

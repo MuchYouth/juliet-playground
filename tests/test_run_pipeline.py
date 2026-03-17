@@ -279,6 +279,23 @@ def test_full_subcommand_disable_pair_runs_trace_first_orchestration(monkeypatch
             'stats': {},
         }
 
+    def fake_export_vuln_patch_dataset(**kwargs):
+        called.append('07c_vuln_patch_export')
+        output_dir = kwargs['output_dir']
+        output_dir.mkdir(parents=True, exist_ok=True)
+        for output_path in [
+            output_dir / 'Real_Vul_data.csv',
+            output_dir / 'summary.json',
+        ]:
+            write_text(output_path, 'ok\n')
+        return {
+            'artifacts': {
+                'csv_path': str(output_dir / 'Real_Vul_data.csv'),
+                'summary_json': str(output_dir / 'summary.json'),
+            },
+            'stats': {},
+        }
+
     def fail_if_called(**kwargs):  # pragma: no cover - safety assertion
         raise AssertionError(f'Unexpected patched export call: {kwargs}')
 
@@ -302,6 +319,7 @@ def test_full_subcommand_disable_pair_runs_trace_first_orchestration(monkeypatch
         module._stage06_trace_slices, 'generate_trace_slices', fake_generate_trace_slices
     )
     monkeypatch.setattr(module, 'export_trace_dataset_from_pipeline', fake_export_trace_dataset)
+    monkeypatch.setattr(module, 'export_vuln_patch_dataset', fake_export_vuln_patch_dataset)
     monkeypatch.setattr(module, 'export_patched_dataset', fail_if_called)
 
     result = run_module_main(
@@ -333,12 +351,14 @@ def test_full_subcommand_disable_pair_runs_trace_first_orchestration(monkeypatch
         '05_trace_dataset',
         '06_trace_slices',
         '07_trace_dataset_export',
+        '07c_vuln_patch_export',
     ]
 
     run_dir = pipeline_root / 'run-trace'
     assert (run_dir / '05_trace_ds' / 'traces.jsonl').exists()
     assert (run_dir / '06_trace_slices' / 'summary.json').exists()
     assert (run_dir / '07_dataset_export' / 'summary.json').exists()
+    assert (run_dir / '07_dataset_export' / 'vuln_patch' / 'summary.json').exists()
     assert not (run_dir / '07_dataset_export' / 'train_patched_counterparts_summary.json').exists()
 
 
