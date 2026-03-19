@@ -101,6 +101,105 @@ def next_meaningful_token(tokens: list[dict[str, str]], index: int) -> dict[str,
     return None
 
 
+def next_meaningful_index(tokens: list[dict[str, str]], index: int) -> int | None:
+    for j in range(index + 1, len(tokens)):
+        token = tokens[j]
+        if token['kind'] in {'ws', 'comment'}:
+            continue
+        return j
+    return None
+
+
+def matching_closing_paren_index(tokens: list[dict[str, str]], open_index: int) -> int | None:
+    depth = 0
+    for idx in range(open_index, len(tokens)):
+        token = tokens[idx]
+        if token['kind'] != 'punct':
+            continue
+        if token['text'] == '(':
+            depth += 1
+            continue
+        if token['text'] != ')':
+            continue
+        depth -= 1
+        if depth == 0:
+            return idx
+    return None
+
+
+def replace_identifier_with_placeholder(
+    tokens: list[dict[str, str]],
+    index: int,
+    placeholder_map: dict[str, str],
+) -> int:
+    name = tokens[index]['text']
+    placeholder = placeholder_map.get(name)
+    if placeholder is None:
+        placeholder = f'FUNC_{len(placeholder_map) + 1}'
+        placeholder_map[name] = placeholder
+    if tokens[index]['text'] == placeholder:
+        return 0
+    tokens[index]['text'] = placeholder
+    return 1
+
+
+def is_constructor_type_context(
+    tokens: list[dict[str, str]],
+    index: int,
+) -> bool:
+    prev_token = previous_meaningful_token(tokens, index)
+    if prev_token is not None and prev_token['text'] in {'.', '->', '::'}:
+        return False
+
+    next_index = next_meaningful_index(tokens, index)
+    if next_index is None:
+        return False
+
+    while next_index is not None and tokens[next_index]['text'] in {'*', '&'}:
+        next_index = next_meaningful_index(tokens, next_index)
+    if next_index is None or tokens[next_index]['kind'] != 'identifier':
+        return False
+
+    after_identifier_index = next_meaningful_index(tokens, next_index)
+    if after_identifier_index is None:
+        return False
+
+    after_identifier = tokens[after_identifier_index]
+    if after_identifier['text'] == '(':
+        close_index = matching_closing_paren_index(tokens, after_identifier_index)
+        if close_index is None:
+            return False
+        terminator_index = next_meaningful_index(tokens, close_index)
+        if terminator_index is None:
+            return False
+        return tokens[terminator_index]['text'] == ';'
+
+    if after_identifier['text'] != '=':
+        return False
+
+    new_index = next_meaningful_index(tokens, after_identifier_index)
+    if new_index is None or tokens[new_index]['text'] != 'new':
+        return False
+
+    allocated_type_index = next_meaningful_index(tokens, new_index)
+    if allocated_type_index is None or tokens[allocated_type_index]['kind'] != 'identifier':
+        return False
+    if tokens[allocated_type_index]['text'] != tokens[index]['text']:
+        return False
+
+    open_index = next_meaningful_index(tokens, allocated_type_index)
+    if open_index is None or tokens[open_index]['text'] != '(':
+        return False
+
+    close_index = matching_closing_paren_index(tokens, open_index)
+    if close_index is None:
+        return False
+    terminator_index = next_meaningful_index(tokens, close_index)
+    if terminator_index is None:
+        return False
+    return tokens[terminator_index]['text'] == ';'
+
+
 def normalize_slice_function_names(
     code: str, user_defined_function_names: set[str]
 ) -> tuple[str, dict[str, str], int]:
@@ -121,18 +220,14 @@ def normalize_slice_function_names(
         prev_token = previous_meaningful_token(tokens, idx)
         next_token = next_meaningful_token(tokens, idx)
 
-        if next_token is None or next_token['text'] != '(':
-            continue
-        if prev_token is not None and prev_token['text'] in {'.', '->', '::'}:
+        if next_token is not None and next_token['text'] == '(':
+            if prev_token is not None and prev_token['text'] in {'.', '->', '::'}:
+                continue
+            replacements += replace_identifier_with_placeholder(tokens, idx, placeholder_map)
             continue
 
-        placeholder = placeholder_map.get(name)
-        if placeholder is None:
-            placeholder = f'FUNC_{len(placeholder_map) + 1}'
-            placeholder_map[name] = placeholder
-        if token['text'] != placeholder:
-            token['text'] = placeholder
-            replacements += 1
+        if is_constructor_type_context(tokens, idx):
+            replacements += replace_identifier_with_placeholder(tokens, idx, placeholder_map)
 
     return ''.join(token['text'] for token in tokens), placeholder_map, replacements
 

@@ -55,6 +55,19 @@ def node_text(node, source_bytes: bytes) -> str:
     return source_bytes[node.start_byte : node.end_byte].decode('utf-8', errors='ignore')
 
 
+def constructor_alias_for_function_name(name: str) -> str | None:
+    if not name or '::' not in name:
+        return None
+
+    class_name, method_name = name.rsplit('::', 1)
+    class_short_name = class_name.rsplit('::', 1)[-1]
+    if not class_short_name:
+        return None
+    if method_name == class_short_name or method_name == f'~{class_short_name}':
+        return class_short_name
+    return None
+
+
 def extract_defined_function_names(root_node, source_bytes: bytes) -> set[str]:
     names: set[str] = set()
     stack = [root_node]
@@ -65,6 +78,9 @@ def extract_defined_function_names(root_node, source_bytes: bytes) -> set[str]:
             name = extract_function_name_from_declarator(declarator, source_bytes)
             if name:
                 names.add(name)
+                constructor_alias = constructor_alias_for_function_name(name)
+                if constructor_alias:
+                    names.add(constructor_alias)
         stack.extend(reversed(node.children))
     return names
 
