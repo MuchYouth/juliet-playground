@@ -6,11 +6,17 @@ from collections import Counter
 from dataclasses import dataclass
 from pathlib import Path
 
+from shared.callsite_extraction import (
+    FileContext,
+    choose_line_node,
+    extract_call_sites_for_line,
+    load_file_context,
+)
 from shared.csvio import write_csv_rows
 from shared.dataset_sources import load_tree_sitter_parsers
 from shared.jsonio import write_json, write_stage_summary
 from shared.juliet_manifest import build_manifest_source_index
-from shared.source_parsing import PARSER_LANG_BY_SUFFIX, SOURCE_EXTS, node_first_line_text
+from shared.source_parsing import SOURCE_EXTS, node_first_line_text
 
 TARGET_COMMENT_TAGS = ('comment_flaw', 'comment_fix')
 TARGET_ALL_TAGS = (*TARGET_COMMENT_TAGS, 'flaw')
@@ -23,13 +29,6 @@ DEFINE_OBJ_RE = re.compile(r'^\s*#\s*define\s+([A-Za-z_][A-Za-z0-9_]*)\b(.*)$')
 PP_IF_RE = re.compile(r'^\s*#\s*(if|ifdef|ifndef)\b')
 PP_ENDIF_RE = re.compile(r'^\s*#\s*endif\b')
 IDENT_RE = re.compile(r'[A-Za-z_][A-Za-z0-9_]*')
-
-
-@dataclass
-class FileContext:
-    source_bytes: bytes
-    source_lines: list[str]
-    line_nodes: dict[int, list[object]]
 
 
 @dataclass
@@ -76,84 +75,6 @@ class FlowAwareCodeBackfillResult:
     failed_examples: list[dict[str, int | str]]
 
 
-def _build_line_nodes(root_node) -> dict[int, list[object]]:
-    line_nodes: dict[int, list[object]] = {}
-    stack = [root_node]
-    while stack:
-        node = stack.pop()
-        if node.is_named:
-            line = node.start_point[0] + 1
-            line_nodes.setdefault(line, []).append(node)
-        stack.extend(reversed(node.children))
-    return line_nodes
-
-
-def _choose_node(
-    line_nodes: dict[int, list[object]], source_bytes: bytes, line_no: int, target_text: str | None
-) -> object | None:
-    candidates = line_nodes.get(line_no, [])
-    if not candidates:
-        return None
-
-    if target_text is not None:
-        matched = [n for n in candidates if node_first_line_text(n, source_bytes) == target_text]
-        if matched:
-            return min(matched, key=lambda n: n.end_byte - n.start_byte)
-
-    return min(candidates, key=lambda n: n.end_byte - n.start_byte)
-
-
-def _extract_calls(node, source_bytes: bytes, target_line: int) -> list[dict[str, int | str]]:
-    calls: list[dict[str, int | str]] = []
-    seen: set[tuple[str, int]] = set()
-    stack = [node]
-    while stack:
-        n = stack.pop()
-        if n.type == 'call_expression' and (n.start_point[0] + 1) == target_line:
-            fn = n.child_by_field_name('function')
-            args = n.child_by_field_name('arguments')
-            name = (
-                source_bytes[fn.start_byte : fn.end_byte].decode('utf-8', errors='ignore').strip()
-                if fn is not None
-                else ''
-            )
-            lname = name.lower()
-            if (
-                'g2b' in lname
-                or 'b2b' in lname
-                or 'bad' in lname
-                or lname.startswith('global')
-                or lname.startswith('helper')
-            ):
-                stack.extend(reversed(n.children))
-                continue
-            argc = len(args.named_children) if args is not None else 0
-            sig = (name, argc)
-            if sig not in seen:
-                seen.add(sig)
-                calls.append({'name': name, 'argc': argc})
-        stack.extend(reversed(n.children))
-    return calls
-
-
-def _load_file_context(src: Path, parsers: dict[str, object]) -> FileContext:
-    content = src.read_text(encoding='utf-8', errors='ignore')
-    source_bytes = content.encode('utf-8', errors='ignore')
-    source_lines = content.splitlines()
-    line_nodes: dict[int, list[object]] = {}
-
-    language_name = PARSER_LANG_BY_SUFFIX.get(src.suffix.lower())
-    parser = parsers.get(language_name) if language_name else None
-    if parser is not None:
-        try:
-            tree = parser.parse(source_bytes)
-            line_nodes = _build_line_nodes(tree.root_node)
-        except Exception:
-            line_nodes = {}
-
-    return FileContext(source_bytes=source_bytes, source_lines=source_lines, line_nodes=line_nodes)
-
-
 def _fallback_line_text(ctx: FileContext, line_no: int) -> str:
     if 1 <= line_no <= len(ctx.source_lines):
         return ctx.source_lines[line_no - 1].strip()
@@ -161,7 +82,7 @@ def _fallback_line_text(ctx: FileContext, line_no: int) -> str:
 
 
 def _derive_flaw_key(ctx: FileContext, line_no: int) -> str:
-    node = _choose_node(ctx.line_nodes, ctx.source_bytes, line_no, target_text=None)
+    node = choose_line_node(ctx=ctx, line_no=line_no, target_text=None)
     if node is not None:
         text = node_first_line_text(node, ctx.source_bytes)
         if text:
@@ -300,7 +221,7 @@ def _get_or_load_file_context(
 ) -> FileContext | None:
     if file_name not in cache:
         src = source_index.get(file_name)
-        cache[file_name] = _load_file_context(src, parsers) if src is not None else None
+        cache[file_name] = load_file_context(src, parsers) if src is not None else None
     return cache[file_name]
 
 
@@ -312,10 +233,10 @@ def _build_record_candidate_entry(
 ) -> list[dict[str, int | str]]:
     if ctx is None:
         return []
-    chosen = _choose_node(ctx.line_nodes, ctx.source_bytes, line_no, target_text=key)
-    if chosen is None:
-        return []
-    return _extract_calls(chosen, ctx.source_bytes, line_no)
+    return [
+        call_site.to_candidate_entry()
+        for call_site in extract_call_sites_for_line(ctx=ctx, line_no=line_no, target_text=key)
+    ]
 
 
 def _manifest_has_flow_roles(root: ET.Element) -> bool:
