@@ -210,6 +210,16 @@ python tools/run_linevul.py \
   --run-dir artifacts/pipeline-runs/run-2026.03.17-11:28:48 \
   --dry-run
 
+# 최신 pipeline run의 Real_Vul_data.csv 를 VP-Bench pdbert 컨테이너로 넘겨
+# prepare -> train -> test -> analyze 실행
+# vuln_patch/Real_Vul_data.csv 가 있으면 같은 model.tar.gz 로 추가 prepare -> test -> analyze 실행
+python tools/run_pdbert.py
+
+# 특정 run 대상 dry-run
+python tools/run_pdbert.py \
+  --run-dir artifacts/pipeline-runs/run-2026.03.18-04:05:48 \
+  --dry-run
+
 # 두 pipeline run 또는 dataset export 디렉터리 비교
 python tools/compare-artifacts.py \
   artifacts/pipeline-runs/run-before \
@@ -241,6 +251,27 @@ python tools/compare-artifacts.py \
   현재 Stage 07 CSV 는 `processed_func`, `vulnerable_line_numbers`, `dataset_type` 기준으로는
   바로 사용할 수 있지만, 원본 `linevul_main.py` 가 기대하는
   `flaw_line`, `flaw_line_index` 컬럼은 포함하지 않습니다.
+
+## PDBERT 연동 메모
+
+- `tools/run_pdbert.py` 는 Stage 07의 `Real_Vul_data.csv` 를 읽어
+  VP-Bench의 `pdbert` 컨테이너에서
+  `prepare_dataset.py` -> `train_eval_from_config.py` -> `analyze_prediction.py` 를 실행합니다.
+- 기본적으로 `processed_func` 컬럼을 직접 사용하므로, Stage 07 CSV를 그대로 넘길 수 있습니다.
+- 같은 run에 `07_dataset_export/vuln_patch/Real_Vul_data.csv` 가 있으면
+  primary dataset 학습이 끝난 뒤 같은 `model.tar.gz` / `config.json` 을 재사용해서
+  vuln_patch dataset 에 대해 `prepare -> test -> analyze` 를 추가로 실행합니다.
+- 기본 대상 경로:
+  - VP-Bench root: `/home/sojeon/Desktop/VP-Bench`
+  - container: `pdbert`
+- 결과는 기본적으로 VP-Bench 쪽에만 저장됩니다.
+  - dataset staging:
+    `downloads/PDBERT/data/datasets/extrinsic/vul_detect/juliet-playground/<run-id>/primary/`
+  - model/output:
+    `downloads/PDBERT/data/models/extrinsic/vul_detect/juliet-playground/<run-id>/primary/`
+  - vuln_patch staging/output:
+    `downloads/PDBERT/data/datasets/extrinsic/vul_detect/juliet-playground/<run-id>/vuln_patch/`
+    `downloads/PDBERT/data/models/extrinsic/vul_detect/juliet-playground/<run-id>/vuln_patch/`
 
 ## 메모
 
