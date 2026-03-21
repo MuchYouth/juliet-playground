@@ -8,10 +8,12 @@ from typing import Any
 
 from shared.artifact_layout import build_dataset_export_paths, path_strings
 from shared.csvio import write_csv_rows
-from shared.dataset_normalize import normalize_slice_function_names, normalized_code_md5
+from shared.dataset_normalize import normalize_slice_identifiers, normalized_code_md5
 from shared.dataset_sources import (
+    IdentifierInventory,
     build_source_file_candidates,
-    collect_defined_function_names,
+    collect_identifier_inventory,
+    expand_source_candidates_for_identifier_inventory,
     load_tree_sitter_parsers,
     normalize_artifact_path,
 )
@@ -91,22 +93,25 @@ def _candidate_record(
     signature_payload = json.loads(trace_file.read_text(encoding='utf-8'))
     primary_file_hint = str(signature_payload.get('file') or '') or None
     source_candidates = build_source_file_candidates(signature_payload, primary_file_hint)
+    inventory_source_candidates = expand_source_candidates_for_identifier_inventory(
+        source_candidates
+    )
 
-    user_defined_function_names: set[str] = set()
-    for source_path in source_candidates:
+    identifier_inventory = IdentifierInventory()
+    for source_path in inventory_source_candidates:
         source_key = str(source_path)
-        if source_key not in runtime['source_func_cache']:
+        if source_key not in runtime['source_inventory_cache']:
             if source_path.exists():
-                names, _error = collect_defined_function_names(source_path, runtime['parsers'])
+                inventory, _error = collect_identifier_inventory(source_path, runtime['parsers'])
             else:
-                names = set()
-            runtime['source_func_cache'][source_key] = names
-        user_defined_function_names.update(runtime['source_func_cache'][source_key])
+                inventory = IdentifierInventory()
+            runtime['source_inventory_cache'][source_key] = inventory
+        identifier_inventory.update(runtime['source_inventory_cache'][source_key])
 
     original_code = slice_path.read_text(encoding='utf-8', errors='replace')
-    normalized_code, _, _ = normalize_slice_function_names(
+    normalized_code, _, _ = normalize_slice_identifiers(
         original_code,
-        user_defined_function_names,
+        identifier_inventory,
     )
     token_count = count_code_tokens(runtime['tokenizer'], normalized_code)
     if token_count > CONTENT_TOKEN_LIMIT:
@@ -390,7 +395,7 @@ def export_trace_dataset_from_pipeline(
     runtime = {
         'tokenizer': load_tokenizer('microsoft/codebert-base'),
         'parsers': load_tree_sitter_parsers(),
-        'source_func_cache': {},
+        'source_inventory_cache': {},
     }
 
     candidate_rows: list[dict[str, Any]] = []

@@ -1,3 +1,3 @@
-    FUNC_1(data);
-    memset(data, 'A', 50-1); /* fill with 'A's */
-        strcat(dest, data);
+    FUNC_1(VAR_1);
+    memset(VAR_1, 'A', 50-1); /* fill with 'A's */
+        strcat(VAR_2, VAR_1);

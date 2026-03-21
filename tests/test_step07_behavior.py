@@ -3,6 +3,7 @@ from __future__ import annotations
 import csv
 import json
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -133,8 +134,17 @@ def test_export_dataset_from_pipeline_writes_split_outputs(tmp_path, monkeypatch
     pairs_jsonl = tmp_path / 'pairs.jsonl'
     write_jsonl(pairs_jsonl, [pair_a, pair_b, pair_c, pair_d])
 
-    monkeypatch.setattr(module, 'build_source_file_candidates', lambda *_args, **_kwargs: [source_path])
-    monkeypatch.setattr(module, 'collect_defined_function_names', lambda *_args, **_kwargs: (set(), None))
+    monkeypatch.setattr(
+        module, 'build_source_file_candidates', lambda *_args, **_kwargs: [source_path]
+    )
+    monkeypatch.setattr(
+        module,
+        'collect_identifier_inventory',
+        lambda *_args, **_kwargs: (
+            SimpleNamespace(function_names=set(), type_names=set(), variable_names=set()),
+            None,
+        ),
+    )
 
     output_dir = tmp_path / 'out'
     with deterministic_tokenizer_context():
@@ -180,14 +190,25 @@ def test_export_dataset_from_pipeline_filters_over_limit_pairs(tmp_path, monkeyp
     )
 
     root = tmp_path / 'inputs'
-    pair = _make_pair(root, 'CASE_LONG', 'pair-long', 'g2b', 'OVER_LIMIT bad\n', 'OVER_LIMIT good\n')
+    pair = _make_pair(
+        root, 'CASE_LONG', 'pair-long', 'g2b', 'OVER_LIMIT bad\n', 'OVER_LIMIT good\n'
+    )
     pairs_jsonl = tmp_path / 'pairs.jsonl'
     write_jsonl(pairs_jsonl, [pair])
 
     source_path = tmp_path / 'sources' / 'shared.c'
     write_text(source_path, 'int helper(void) { return 0; }\n')
-    monkeypatch.setattr(module, 'build_source_file_candidates', lambda *_args, **_kwargs: [source_path])
-    monkeypatch.setattr(module, 'collect_defined_function_names', lambda *_args, **_kwargs: (set(), None))
+    monkeypatch.setattr(
+        module, 'build_source_file_candidates', lambda *_args, **_kwargs: [source_path]
+    )
+    monkeypatch.setattr(
+        module,
+        'collect_identifier_inventory',
+        lambda *_args, **_kwargs: (
+            SimpleNamespace(function_names=set(), type_names=set(), variable_names=set()),
+            None,
+        ),
+    )
 
     from shared import slice_tokenizer
 

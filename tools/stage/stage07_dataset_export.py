@@ -7,7 +7,11 @@ from typing import Any
 
 from shared.artifact_layout import build_dataset_export_paths
 from shared.dataset_export_core import DatasetExportRequest, run_configured_step07_export
-from shared.dataset_sources import build_source_file_candidates, collect_defined_function_names
+from shared.dataset_sources import (
+    build_source_file_candidates,
+    collect_identifier_inventory,
+    expand_source_candidates_for_identifier_inventory,
+)
 from shared.jsonio import load_jsonl as _load_jsonl
 
 
@@ -67,8 +71,9 @@ def export_primary_dataset(
             split_assignments_fn=lambda pair_ids: compute_pair_split(
                 pair_ids, train_ratio=train_ratio, seed=split_seed
             ),
-            collect_defined_function_names_fn=collect_defined_function_names,
+            collect_identifier_inventory_fn=collect_identifier_inventory,
             build_source_file_candidates_fn=build_source_file_candidates,
+            expand_inventory_source_candidates_fn=expand_source_candidates_for_identifier_inventory,
         )
     )
 

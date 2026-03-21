@@ -9,8 +9,9 @@ from typing import Any, Callable
 from shared.artifact_layout import path_strings
 from shared.csvio import write_csv_rows
 from shared.dataset_dedup import ROLE_SORT_ORDER, dedupe_pairs_by_normalized_rows
-from shared.dataset_normalize import normalize_slice_function_names
+from shared.dataset_normalize import normalize_slice_identifiers
 from shared.dataset_sources import (
+    IdentifierInventory,
     find_slice_path,
     load_tree_sitter_parsers,
     normalize_artifact_path,
@@ -26,10 +27,11 @@ class DatasetExportRequest:
     export_paths: dict[str, Path]
     dedup_mode: str
     split_assignments_fn: Callable[[list[str]], dict[str, str]]
-    collect_defined_function_names_fn: Callable[
-        [Path, dict[str, object]], tuple[set[str], str | None]
+    collect_identifier_inventory_fn: Callable[
+        [Path, dict[str, object]], tuple[IdentifierInventory, str | None]
     ]
     build_source_file_candidates_fn: Callable[[dict[str, Any], str | None], list[Path]]
+    expand_inventory_source_candidates_fn: Callable[[list[Path]], list[Path]]
     dataset_basename: str | None = None
 
 
@@ -39,7 +41,7 @@ class ExportRuntime:
     parsers: dict[str, object]
     content_token_limit: int
     count_code_tokens_fn: Callable[[object, str], int]
-    source_func_cache: dict[str, set[str]] = field(default_factory=dict)
+    source_inventory_cache: dict[str, IdentifierInventory] = field(default_factory=dict)
     source_parse_error_cache: dict[str, str] = field(default_factory=dict)
     source_files_seen: set[str] = field(default_factory=set)
     source_files_failed: set[str] = field(default_factory=set)
@@ -93,31 +95,31 @@ def _load_signature_payload(signature_path: Path) -> dict[str, Any]:
     return json.loads(signature_path.read_text(encoding='utf-8'))
 
 
-def _collect_user_defined_function_names(
+def _collect_identifier_inventory(
     *,
     source_candidates: list[Path],
     request: DatasetExportRequest,
     runtime: ExportRuntime,
-) -> set[str]:
-    user_defined_function_names: set[str] = set()
+) -> IdentifierInventory:
+    identifier_inventory = IdentifierInventory()
     for source_path in source_candidates:
         source_key = str(source_path)
         if source_path.exists():
             runtime.source_files_seen.add(source_key)
-        if source_key not in runtime.source_func_cache:
+        if source_key not in runtime.source_inventory_cache:
             if source_path.exists():
-                names, error = request.collect_defined_function_names_fn(
+                inventory, error = request.collect_identifier_inventory_fn(
                     source_path, runtime.parsers
                 )
             else:
-                names, error = set(), 'missing_source_file'
-            runtime.source_func_cache[source_key] = names
+                inventory, error = IdentifierInventory(), 'missing_source_file'
+            runtime.source_inventory_cache[source_key] = inventory
             if error is not None:
                 runtime.source_parse_error_cache[source_key] = error
                 if source_path.exists():
                     runtime.source_files_failed.add(source_key)
-        user_defined_function_names.update(runtime.source_func_cache[source_key])
-    return user_defined_function_names
+        identifier_inventory.update(runtime.source_inventory_cache[source_key])
+    return identifier_inventory
 
 
 def _build_pair_role_record(
@@ -146,17 +148,20 @@ def _build_pair_role_record(
 
     signature_payload = _load_signature_payload(signature_path)
     primary_file_hint = str(signature_payload.get('file') or '') or None
-    source_candidates = request.build_source_file_candidates_fn(signature_payload, primary_file_hint)
-    user_defined_function_names = _collect_user_defined_function_names(
-        source_candidates=source_candidates,
+    source_candidates = request.build_source_file_candidates_fn(
+        signature_payload, primary_file_hint
+    )
+    inventory_source_candidates = request.expand_inventory_source_candidates_fn(source_candidates)
+    identifier_inventory = _collect_identifier_inventory(
+        source_candidates=inventory_source_candidates,
         request=request,
         runtime=runtime,
     )
 
     original_code = slice_path.read_text(encoding='utf-8', errors='replace')
-    normalized_code, _, _ = normalize_slice_function_names(
+    normalized_code, _, _ = normalize_slice_identifiers(
         original_code,
-        user_defined_function_names,
+        identifier_inventory,
     )
     token_count = runtime.count_code_tokens_fn(runtime.tokenizer, normalized_code)
     exceeds_limit = token_count > runtime.content_token_limit

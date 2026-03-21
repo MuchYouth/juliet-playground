@@ -2,6 +2,22 @@ from __future__ import annotations
 
 import hashlib
 
+from shared.dataset_sources import IdentifierInventory
+
+FUNCTION_CATEGORY = 'function'
+TYPE_CATEGORY = 'type'
+VARIABLE_CATEGORY = 'variable'
+DEFAULT_PLACEHOLDER_PREFIXES = {
+    FUNCTION_CATEGORY: 'FUNC',
+    TYPE_CATEGORY: 'TYPE',
+    VARIABLE_CATEGORY: 'VAR',
+}
+LEGACY_PLACEHOLDER_PREFIXES = {
+    FUNCTION_CATEGORY: 'FUNC',
+    TYPE_CATEGORY: 'FUNC',
+    VARIABLE_CATEGORY: 'FUNC',
+}
+
 
 def lex_c_like(code: str) -> list[dict[str, str]]:
     tokens: list[dict[str, str]] = []
@@ -130,12 +146,16 @@ def matching_closing_paren_index(tokens: list[dict[str, str]], open_index: int) 
 def replace_identifier_with_placeholder(
     tokens: list[dict[str, str]],
     index: int,
-    placeholder_map: dict[str, str],
+    *,
+    category: str,
+    placeholder_maps: dict[str, dict[str, str]],
+    placeholder_prefixes: dict[str, str],
 ) -> int:
     name = tokens[index]['text']
+    placeholder_map = placeholder_maps[category]
     placeholder = placeholder_map.get(name)
     if placeholder is None:
-        placeholder = f'FUNC_{len(placeholder_map) + 1}'
+        placeholder = f'{placeholder_prefixes[category]}_{len(placeholder_map) + 1}'
         placeholder_map[name] = placeholder
     if tokens[index]['text'] == placeholder:
         return 0
@@ -143,13 +163,17 @@ def replace_identifier_with_placeholder(
     return 1
 
 
-def is_constructor_type_context(
-    tokens: list[dict[str, str]],
-    index: int,
-) -> bool:
+def is_function_call_context(tokens: list[dict[str, str]], index: int) -> bool:
+    next_token = next_meaningful_token(tokens, index)
+    return next_token is not None and next_token['text'] == '('
+
+
+def _is_declaration_type_context(tokens: list[dict[str, str]], index: int) -> bool:
     prev_token = previous_meaningful_token(tokens, index)
-    if prev_token is not None and prev_token['text'] in {'.', '->', '::'}:
+    if prev_token is not None and prev_token['text'] in {'.', '->'}:
         return False
+    if prev_token is not None and prev_token['text'] in {'class', 'struct', 'union', 'enum'}:
+        return True
 
     next_index = next_meaningful_index(tokens, index)
     if next_index is None:
@@ -163,41 +187,84 @@ def is_constructor_type_context(
     after_identifier_index = next_meaningful_index(tokens, next_index)
     if after_identifier_index is None:
         return False
+    return tokens[after_identifier_index]['text'] in {';', '=', ',', ')', '(', '['}
 
-    after_identifier = tokens[after_identifier_index]
-    if after_identifier['text'] == '(':
-        close_index = matching_closing_paren_index(tokens, after_identifier_index)
-        if close_index is None:
-            return False
-        terminator_index = next_meaningful_index(tokens, close_index)
-        if terminator_index is None:
-            return False
-        return tokens[terminator_index]['text'] == ';'
 
-    if after_identifier['text'] != '=':
-        return False
+def is_type_context(
+    tokens: list[dict[str, str]],
+    index: int,
+) -> bool:
+    prev_token = previous_meaningful_token(tokens, index)
+    if prev_token is not None and prev_token['text'] == 'new':
+        return is_function_call_context(tokens, index)
+    return _is_declaration_type_context(tokens, index)
 
-    new_index = next_meaningful_index(tokens, after_identifier_index)
-    if new_index is None or tokens[new_index]['text'] != 'new':
-        return False
 
-    allocated_type_index = next_meaningful_index(tokens, new_index)
-    if allocated_type_index is None or tokens[allocated_type_index]['kind'] != 'identifier':
-        return False
-    if tokens[allocated_type_index]['text'] != tokens[index]['text']:
-        return False
+def new_placeholder_maps() -> dict[str, dict[str, str]]:
+    return {
+        FUNCTION_CATEGORY: {},
+        TYPE_CATEGORY: {},
+        VARIABLE_CATEGORY: {},
+    }
 
-    open_index = next_meaningful_index(tokens, allocated_type_index)
-    if open_index is None or tokens[open_index]['text'] != '(':
-        return False
 
-    close_index = matching_closing_paren_index(tokens, open_index)
-    if close_index is None:
-        return False
-    terminator_index = next_meaningful_index(tokens, close_index)
-    if terminator_index is None:
-        return False
-    return tokens[terminator_index]['text'] == ';'
+def flatten_placeholder_maps(placeholder_maps: dict[str, dict[str, str]]) -> dict[str, str]:
+    flattened: dict[str, str] = {}
+    for category in (FUNCTION_CATEGORY, TYPE_CATEGORY, VARIABLE_CATEGORY):
+        flattened.update(placeholder_maps[category])
+    return flattened
+
+
+def normalize_slice_identifiers(
+    code: str,
+    identifier_inventory: IdentifierInventory,
+    *,
+    placeholder_prefixes: dict[str, str] | None = None,
+) -> tuple[str, dict[str, dict[str, str]], int]:
+    if identifier_inventory.is_empty():
+        return code, new_placeholder_maps(), 0
+
+    tokens = lex_c_like(code)
+    placeholder_maps = new_placeholder_maps()
+    selected_prefixes = dict(DEFAULT_PLACEHOLDER_PREFIXES)
+    if placeholder_prefixes is not None:
+        selected_prefixes.update(placeholder_prefixes)
+    replacements = 0
+
+    for idx, token in enumerate(tokens):
+        if token['kind'] != 'identifier':
+            continue
+        name = token['text']
+        if name in identifier_inventory.function_names and is_function_call_context(tokens, idx):
+            replacements += replace_identifier_with_placeholder(
+                tokens,
+                idx,
+                category=FUNCTION_CATEGORY,
+                placeholder_maps=placeholder_maps,
+                placeholder_prefixes=selected_prefixes,
+            )
+            continue
+
+        if name in identifier_inventory.type_names and is_type_context(tokens, idx):
+            replacements += replace_identifier_with_placeholder(
+                tokens,
+                idx,
+                category=TYPE_CATEGORY,
+                placeholder_maps=placeholder_maps,
+                placeholder_prefixes=selected_prefixes,
+            )
+            continue
+
+        if name in identifier_inventory.variable_names:
+            replacements += replace_identifier_with_placeholder(
+                tokens,
+                idx,
+                category=VARIABLE_CATEGORY,
+                placeholder_maps=placeholder_maps,
+                placeholder_prefixes=selected_prefixes,
+            )
+
+    return ''.join(token['text'] for token in tokens), placeholder_maps, replacements
 
 
 def normalize_slice_function_names(
@@ -206,30 +273,15 @@ def normalize_slice_function_names(
     if not user_defined_function_names:
         return code, {}, 0
 
-    tokens = lex_c_like(code)
-    placeholder_map: dict[str, str] = {}
-    replacements = 0
-
-    for idx, token in enumerate(tokens):
-        if token['kind'] != 'identifier':
-            continue
-        name = token['text']
-        if name not in user_defined_function_names:
-            continue
-
-        prev_token = previous_meaningful_token(tokens, idx)
-        next_token = next_meaningful_token(tokens, idx)
-
-        if next_token is not None and next_token['text'] == '(':
-            if prev_token is not None and prev_token['text'] in {'.', '->', '::'}:
-                continue
-            replacements += replace_identifier_with_placeholder(tokens, idx, placeholder_map)
-            continue
-
-        if is_constructor_type_context(tokens, idx):
-            replacements += replace_identifier_with_placeholder(tokens, idx, placeholder_map)
-
-    return ''.join(token['text'] for token in tokens), placeholder_map, replacements
+    normalized_code, placeholder_maps, replacements = normalize_slice_identifiers(
+        code,
+        IdentifierInventory(
+            function_names=set(user_defined_function_names),
+            type_names=set(user_defined_function_names),
+        ),
+        placeholder_prefixes=LEGACY_PLACEHOLDER_PREFIXES,
+    )
+    return normalized_code, flatten_placeholder_maps(placeholder_maps), replacements
 
 
 def compact_code_for_hash(code: str) -> str:

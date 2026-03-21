@@ -15,7 +15,11 @@ from shared.artifact_layout import (
     path_strings,
 )
 from shared.dataset_export_core import DatasetExportRequest, run_configured_step07_export
-from shared.dataset_sources import build_source_file_candidates, collect_defined_function_names
+from shared.dataset_sources import (
+    build_source_file_candidates,
+    collect_identifier_inventory,
+    expand_source_candidates_for_identifier_inventory,
+)
 from shared.jsonio import load_json, load_jsonl, write_json, write_jsonl
 from shared.pairing import build_trace_priority_key, make_pair_id
 from shared.signatures import load_signature_payload
@@ -52,7 +56,9 @@ def leftover_sort_key(record: dict[str, Any]) -> tuple[Any, ...]:
     )
 
 
-def _selection_stats(selection_counts: Counter[str], train_val_pair_ids_total: int) -> dict[str, Any]:
+def _selection_stats(
+    selection_counts: Counter[str], train_val_pair_ids_total: int
+) -> dict[str, Any]:
     return {
         'counts': dict(selection_counts),
         'train_val_pair_ids_total': train_val_pair_ids_total,
@@ -65,15 +71,15 @@ def build_train_patched_counterparts(*, run_dir: Path) -> dict[str, Any]:
     pair_trace_paths = build_pair_trace_paths(paths['pair_dir'])
 
     if not pair_trace_paths['pairs_jsonl'].exists():
-        raise FileNotFoundError(f"Pairs JSONL not found: {pair_trace_paths['pairs_jsonl']}")
+        raise FileNotFoundError(f'Pairs JSONL not found: {pair_trace_paths["pairs_jsonl"]}')
     if not pair_trace_paths['leftover_counterparts_jsonl'].exists():
         raise FileNotFoundError(
             'Leftover counterparts JSONL not found: '
-            f"{pair_trace_paths['leftover_counterparts_jsonl']}"
+            f'{pair_trace_paths["leftover_counterparts_jsonl"]}'
         )
     if not paths['primary_split_manifest_json'].exists():
         raise FileNotFoundError(
-            f"Primary split manifest not found: {paths['primary_split_manifest_json']}"
+            f'Primary split manifest not found: {paths["primary_split_manifest_json"]}'
         )
 
     prepare_target(paths['pairing']['signatures_dir'], overwrite=False)
@@ -84,7 +90,7 @@ def build_train_patched_counterparts(*, run_dir: Path) -> dict[str, Any]:
     split_manifest = json.loads(paths['primary_split_manifest_json'].read_text(encoding='utf-8'))
     train_val_pair_ids = set(split_manifest.get('pair_ids', {}).get('train_val') or [])
     if not train_val_pair_ids:
-        raise ValueError(f"No train_val pair_ids found in {paths['primary_split_manifest_json']}")
+        raise ValueError(f'No train_val pair_ids found in {paths["primary_split_manifest_json"]}')
 
     primary_pairs = load_jsonl(pair_trace_paths['pairs_jsonl'])
     primary_pairs_by_testcase = {
@@ -189,8 +195,9 @@ def export_dataset(
             export_paths=dataset_paths,
             dedup_mode=dedup_mode,
             split_assignments_fn=lambda pair_ids: {pair_id: 'train_val' for pair_id in pair_ids},
-            collect_defined_function_names_fn=collect_defined_function_names,
+            collect_identifier_inventory_fn=collect_identifier_inventory,
             build_source_file_candidates_fn=build_source_file_candidates,
+            expand_inventory_source_candidates_fn=expand_source_candidates_for_identifier_inventory,
             dataset_basename=DATASET_BASENAME,
         )
     )

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import csv
 import json
+from types import SimpleNamespace
 
 from tests.helpers import (
     REPO_ROOT,
@@ -24,7 +25,12 @@ def test_trace_dataset_export_prunes_multi_b2b_and_writes_trace_split_manifest(
 
     monkeypatch.setattr(module, 'build_source_file_candidates', lambda payload, hint: [])
     monkeypatch.setattr(
-        module, 'collect_defined_function_names', lambda path, parsers: (set(), None)
+        module,
+        'collect_identifier_inventory',
+        lambda path, parsers: (
+            SimpleNamespace(function_names=set(), type_names=set(), variable_names=set()),
+            None,
+        ),
     )
     monkeypatch.setattr(module, 'load_tree_sitter_parsers', lambda: {})
 
