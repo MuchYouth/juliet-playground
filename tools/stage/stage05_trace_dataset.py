@@ -1,57 +1,25 @@
 from __future__ import annotations
 
 import hashlib
-import json
 from collections import Counter
-from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from shared import strict_trace as _strict_trace
 from shared.artifact_layout import build_trace_dataset_paths, path_strings
 from shared.fs import prepare_output_dir
 from shared.jsonio import write_jsonl, write_stage_summary
 from shared.signatures import load_signature_payload, stable_signature_ref, stable_trace_ref
 
-
-@dataclass(frozen=True)
-class StrictTraceRecord:
-    testcase_key: str
-    trace_file: Path
-    best_flow_type: str
-    bug_trace_length: int
-    procedure: str | None
+StrictTraceRecord = _strict_trace.StrictTraceRecord
 
 
 def validate_args(trace_jsonl: Path) -> None:
-    if not trace_jsonl.exists():
-        raise FileNotFoundError(f'Strict trace JSONL not found: {trace_jsonl}')
-    if not trace_jsonl.is_file():
-        raise FileNotFoundError(f'Strict trace JSONL is not a file: {trace_jsonl}')
+    _strict_trace.validate_strict_trace_jsonl(trace_jsonl)
 
 
 def load_strict_records(trace_jsonl: Path) -> list[StrictTraceRecord]:
-    records: list[StrictTraceRecord] = []
-    with trace_jsonl.open('r', encoding='utf-8') as f:
-        for lineno, line in enumerate(f, start=1):
-            line = line.strip()
-            if not line:
-                continue
-            obj = json.loads(line)
-            testcase_key = str(obj.get('testcase_key') or '').strip()
-            trace_file_raw = str(obj.get('trace_file') or '').strip()
-            best_flow_type = str(obj.get('best_flow_type') or '').strip()
-            if not testcase_key or not trace_file_raw or not best_flow_type:
-                raise ValueError(f'Missing required keys at line {lineno} in {trace_jsonl}: {obj}')
-            records.append(
-                StrictTraceRecord(
-                    testcase_key=testcase_key,
-                    trace_file=Path(trace_file_raw),
-                    best_flow_type=best_flow_type,
-                    bug_trace_length=int(obj.get('bug_trace_length', 0) or 0),
-                    procedure=obj.get('procedure'),
-                )
-            )
-    return records
+    return _strict_trace.load_strict_records(trace_jsonl)
 
 
 def make_trace_id(record: StrictTraceRecord, signature_payload: dict[str, Any]) -> str:
