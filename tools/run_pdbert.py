@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import re
 import shlex
@@ -28,6 +29,7 @@ REQUIRED_COLUMNS = _bench_runner.REQUIRED_COLUMNS
 PRIMARY_REQUIRED_DATASET_TYPES = _bench_runner.PRIMARY_REQUIRED_DATASET_TYPES
 TEST_ONLY_REQUIRED_DATASET_TYPES = _bench_runner.TEST_ONLY_REQUIRED_DATASET_TYPES
 MODEL_ARTIFACT_NAMES = ('config.json', 'model.tar.gz', 'vocabulary', 'archive')
+TRAINING_LOSS_PLOT_NAME = 'training_loss_by_epoch.png'
 CONTAINER_PDBERT_ROOT = Path('/PDBERT')
 CONTAINER_DATASET_BASE = CONTAINER_PDBERT_ROOT / 'data' / 'datasets' / 'extrinsic' / 'vul_detect'
 CONTAINER_MODEL_BASE = CONTAINER_PDBERT_ROOT / 'data' / 'models' / 'extrinsic' / 'vul_detect'
@@ -372,6 +374,63 @@ def stage_reused_model_artifacts(source_paths: PDBERTPaths, target_paths: PDBERT
         _copy_or_symlink_path(source_path, target_paths.host_output_dir / artifact_name)
 
 
+def training_loss_plot_path(paths: PDBERTPaths) -> Path:
+    return paths.host_output_dir / TRAINING_LOSS_PLOT_NAME
+
+
+def _load_epoch_training_losses(paths: PDBERTPaths) -> list[tuple[int, float]]:
+    epoch_losses: list[tuple[int, float]] = []
+    for metrics_path in sorted(paths.host_output_dir.glob('metrics_epoch_*.json')):
+        match = re.fullmatch(r'metrics_epoch_(\d+)\.json', metrics_path.name)
+        if match is None:
+            continue
+        with metrics_path.open(encoding='utf-8') as f:
+            payload = json.load(f)
+
+        if 'training_loss' not in payload:
+            raise RuntimeError(f'Expected training_loss in metrics file: {metrics_path}')
+
+        raw_epoch = payload.get('epoch', match.group(1))
+        epoch_losses.append((int(raw_epoch) + 1, float(payload['training_loss'])))
+
+    epoch_losses.sort(key=lambda item: item[0])
+    if not epoch_losses:
+        raise RuntimeError(
+            'Expected PDBERT epoch metrics not found after training: '
+            f'{paths.host_output_dir / "metrics_epoch_*.json"}'
+        )
+    return epoch_losses
+
+
+def write_training_loss_plot(paths: PDBERTPaths) -> Path:
+    import matplotlib
+
+    matplotlib.use('Agg')
+    import matplotlib.pyplot as plt
+    import scienceplots  # noqa: F401
+
+    epoch_losses = _load_epoch_training_losses(paths)
+    plot_path = training_loss_plot_path(paths)
+    plot_path.parent.mkdir(parents=True, exist_ok=True)
+
+    with plt.style.context(['science', 'no-latex']):
+        fig, ax = plt.subplots(figsize=(8, 5))
+        epochs = [epoch for epoch, _ in epoch_losses]
+        losses = [loss for _, loss in epoch_losses]
+        ax.plot(epochs, losses, marker='o', linewidth=2)
+        ax.set_xlabel('Epoch')
+        ax.set_ylabel('Training Loss')
+        ax.set_title('PDBERT Training Loss by Epoch')
+        ax.grid(True, alpha=0.3)
+        if len(epochs) <= 20:
+            ax.set_xticks(epochs)
+        fig.tight_layout()
+        fig.savefig(plot_path, dpi=200)
+        plt.close(fig)
+
+    return plot_path
+
+
 def build_prepare_command(config: PDBERTRunConfig, paths: PDBERTPaths) -> list[str]:
     return [
         *_docker_exec_base(config.container_name),
@@ -512,6 +571,11 @@ def print_planned_commands(
         print(f'Target [{paths.target_name}] Stage 07 CSV: {paths.source_csv}')
         print(f'Target [{paths.target_name}] Host dataset dir: {paths.host_dataset_dir}')
         print(f'Target [{paths.target_name}] Host output dir: {paths.host_output_dir}')
+        if paths.target_name == PRIMARY_TARGET_NAME:
+            print(
+                f'Target [{paths.target_name}] Host training loss plot: '
+                f'{training_loss_plot_path(paths)}'
+            )
         print(f'Target [{paths.target_name}] Host train config: {paths.host_runtime_train_config}')
         print(f'Target [{paths.target_name}] Host test config: {paths.host_runtime_test_config}')
         print(f'Target [{paths.target_name}] Container dataset dir: {paths.container_dataset_dir}')
@@ -526,6 +590,8 @@ def print_completion_summary(paths_list: Sequence[PDBERTPaths]) -> None:
         print(f'  - [{paths.target_name}] staged_csv: {paths.host_dataset_csv}')
         print(f'  - [{paths.target_name}] prepared_json_dir: {paths.host_dataset_dir}')
         print(f'  - [{paths.target_name}] model_dir: {paths.host_output_dir}')
+        if paths.target_name == PRIMARY_TARGET_NAME:
+            print(f'  - [{paths.target_name}] training_loss_plot: {training_loss_plot_path(paths)}')
         print(f'  - [{paths.target_name}] eval_result: {paths.host_eval_result_csv}')
         print(f'  - [{paths.target_name}] analysis_json: {paths.host_analysis_json}')
         print(f'  - [{paths.target_name}] logs: {paths.host_prepare_log.parent}')
@@ -584,6 +650,8 @@ def run_pdbert_from_pipeline(config: PDBERTRunConfig) -> int:
     run_logged_command(primary_train_step.command, primary_paths.host_train_log)
     require_exists(primary_paths.host_model_config_json, 'config.json')
     require_exists(primary_paths.host_model_archive, 'model.tar.gz')
+    plot_path = write_training_loss_plot(primary_paths)
+    print(f'Wrote PDBERT training loss plot to {plot_path}')
 
     primary_test_step = next(
         step

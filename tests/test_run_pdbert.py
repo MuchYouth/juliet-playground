@@ -4,7 +4,7 @@ import csv
 import os
 from pathlib import Path
 
-from tests.helpers import REPO_ROOT, load_module_from_path, run_module_main, write_text
+from tests.helpers import REPO_ROOT, load_module_from_path, run_module_main, write_json, write_text
 
 
 def _make_vpbench_root(root: Path) -> Path:
@@ -191,6 +191,14 @@ def test_run_pdbert_stages_csv_configs_and_runs_primary_pipeline(tmp_path, monke
         elif log_path == primary_paths.host_train_log:
             write_text(primary_paths.host_model_config_json, '{}\n')
             write_text(primary_paths.host_model_archive, 'model\n')
+            write_json(
+                primary_paths.host_output_dir / 'metrics_epoch_0.json',
+                {'epoch': 0, 'training_loss': 0.8},
+            )
+            write_json(
+                primary_paths.host_output_dir / 'metrics_epoch_1.json',
+                {'epoch': 1, 'training_loss': 0.6},
+            )
         elif log_path == primary_paths.host_analyze_log:
             write_text(primary_paths.host_eval_result_csv, 'metric,value\nf1,1.0\n')
             write_text(primary_paths.host_analysis_json, '{}\n')
@@ -238,3 +246,6 @@ def test_run_pdbert_stages_csv_configs_and_runs_primary_pipeline(tmp_path, monke
     ) + '/' in primary_paths.host_runtime_test_config.read_text(encoding='utf-8')
     assert primary_paths.host_eval_result_csv.exists()
     assert primary_paths.host_analysis_json.exists()
+    training_loss_plot = module.training_loss_plot_path(primary_paths)
+    assert training_loss_plot.exists()
+    assert training_loss_plot.read_bytes().startswith(b'\x89PNG\r\n\x1a\n')
