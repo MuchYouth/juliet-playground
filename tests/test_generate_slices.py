@@ -37,8 +37,6 @@ def test_process_signature_db_uses_longest_subtrace_and_dedupes_locations(tmp_pa
     summary = module.process_signature_db(
         signature_db_dir=tmp_path / 'signatures',
         slice_dir=slice_dir,
-        old_prefix=None,
-        new_prefix=None,
     )
 
     assert summary['total_slices'] == 1

@@ -18,144 +18,42 @@ from collections import Counter
 from pathlib import Path
 from typing import Any
 
+from shared import slicing as _slicing
 from shared.artifact_layout import build_slice_stage_paths, path_strings
 from shared.fs import prepare_output_dir
 from shared.jsonio import write_stage_summary
-from shared.paths import RESULT_DIR
-from shared.pipeline_runs import find_latest_pipeline_run_dir
 from shared.traces import extract_std_bug_trace
 
-CPP_SUFFIXES = {'.cpp', '.cc', '.cxx', '.c++'}
 
-
-def infer_run_dir_from_signature_db_dir(signature_db_dir: Path) -> Path | None:
-    if signature_db_dir.name != 'paired_signatures':
-        return None
-    if signature_db_dir.parent.name != '05_pair_trace_ds':
-        return None
-    return signature_db_dir.parent.parent
-
-
-def resolve_paths(
-    *,
-    signature_db_dir: Path | None = None,
-    output_dir: Path | None = None,
-    pipeline_root: Path = Path(RESULT_DIR) / 'pipeline-runs',
-    run_dir: Path | None = None,
-) -> tuple[Path, Path, Path, Path | None]:
-    resolved_run_dir = run_dir.resolve() if run_dir is not None else None
-
-    if signature_db_dir is None:
-        if resolved_run_dir is None:
-            resolved_run_dir = find_latest_pipeline_run_dir(pipeline_root.resolve())
-        resolved_signature_db_dir = resolved_run_dir / '05_pair_trace_ds' / 'paired_signatures'
-    else:
-        resolved_signature_db_dir = signature_db_dir.resolve()
-        if resolved_run_dir is None:
-            resolved_run_dir = infer_run_dir_from_signature_db_dir(resolved_signature_db_dir)
-
-    if output_dir is None:
-        if resolved_run_dir is None:
-            raise ValueError(
-                '--output-dir is required when --signature-db-dir is outside the standard pipeline layout.'
-            )
-        resolved_output_dir = resolved_run_dir / '06_slices'
-    else:
-        resolved_output_dir = output_dir.resolve()
-
-    slice_dir = resolved_output_dir / 'slice'
-    return resolved_signature_db_dir, resolved_output_dir, slice_dir, resolved_run_dir
-
-
-def validate_args(
-    signature_db_dir: Path,
-    *,
-    old_prefix: str | None = None,
-    new_prefix: str | None = None,
-) -> None:
+def validate_args(signature_db_dir: Path) -> None:
     if not signature_db_dir.exists():
         raise FileNotFoundError(f'Signature DB dir not found: {signature_db_dir}')
     if not signature_db_dir.is_dir():
         raise NotADirectoryError(f'Signature DB dir is not a directory: {signature_db_dir}')
-    if bool(old_prefix) != bool(new_prefix):
-        raise ValueError('--old-prefix and --new-prefix must be provided together.')
 
 
-def fix_path(original_path: str, old_prefix: str | None, new_prefix: str | None) -> str:
-    if old_prefix and new_prefix and original_path.startswith(old_prefix):
-        return original_path.replace(old_prefix, new_prefix, 1)
-    return original_path
-
-
-def read_source_line(filepath: Path, line_number: int) -> str | None:
-    try:
-        with filepath.open('r', encoding='utf-8', errors='replace') as f:
-            lines = f.readlines()
-        if 1 <= line_number <= len(lines):
-            return lines[line_number - 1]
-        return None
-    except FileNotFoundError:
-        return None
-    except Exception:
-        return None
-
-
-def classify_suffix(path_like: str | None) -> str | None:
-    if not path_like:
-        return None
-    suffix = Path(path_like).suffix.lower()
-    if suffix == '.c':
-        return '.c'
-    if suffix in CPP_SUFFIXES:
-        return '.cpp'
-    return None
+read_source_line = _slicing.read_source_line
+classify_suffix = _slicing.classify_suffix
 
 
 def guess_output_suffix(data: dict[str, Any], std_bug_trace: list[dict[str, Any]]) -> str:
-    candidates: list[str | None] = [data.get('file')]
-    if data.get('primary_file'):
-        candidates.append(data.get('primary_file'))
-    for node in std_bug_trace:
-        candidates.append(node.get('filename'))
-    for candidate in candidates:
-        suffix = classify_suffix(candidate)
-        if suffix:
-            return suffix
-    return '.c'
+    return _slicing.guess_output_suffix(
+        data,
+        std_bug_trace,
+        extra_candidates=[data.get('primary_file')],
+    )
 
 
-def build_slice(
-    std_bug_trace: list[dict[str, Any]], old_prefix: str | None, new_prefix: str | None
-) -> tuple[str | None, str | None]:
-    slice_lines: list[str] = []
-    seen: set[tuple[str, int]] = set()
-
-    for node in std_bug_trace:
-        filename = node.get('filename')
-        line_number = int(node.get('line_number', 0) or 0)
-        if not filename or line_number <= 0:
-            return None, 'invalid_trace_node'
-
-        fixed_path = fix_path(str(filename), old_prefix, new_prefix)
-        key = (fixed_path, line_number)
-        if key in seen:
-            continue
-        seen.add(key)
-
-        source_line = read_source_line(Path(fixed_path), line_number)
-        if source_line is None:
-            return None, 'missing_source_line'
-        slice_lines.append(source_line)
-
-    return ''.join(slice_lines), None
+def build_slice(std_bug_trace: list[dict[str, Any]]) -> tuple[str | None, str | None]:
+    return _slicing.build_slice(std_bug_trace)
 
 
-def process_signature_db(
-    signature_db_dir: Path, slice_dir: Path, old_prefix: str | None, new_prefix: str | None
-) -> dict[str, Any]:
+def process_signature_db(signature_db_dir: Path, slice_dir: Path) -> dict[str, Any]:
     slice_dir.mkdir(parents=True, exist_ok=True)
 
-    testcase_dirs = sorted(directory for directory in signature_db_dir.iterdir() if directory.is_dir())
+    testcase_dirs = sorted(
+        directory for directory in signature_db_dir.iterdir() if directory.is_dir()
+    )
     total_slices = 0
     counters = Counter()
 
@@ -173,7 +71,7 @@ def process_signature_db(
                     counters['skipped_empty_bug_trace'] += 1
                     continue
 
-                slice_content, skip_reason = build_slice(std_bug_trace, old_prefix, new_prefix)
+                slice_content, skip_reason = build_slice(std_bug_trace)
                 if slice_content is None:
                     counters[f'skipped_{skip_reason}'] += 1
                     continue
@@ -201,22 +99,18 @@ def generate_slices(
     *,
     signature_db_dir: Path,
     output_dir: Path,
-    old_prefix: str | None = None,
-    new_prefix: str | None = None,
     overwrite: bool = False,
     run_dir: Path | None = None,
     dataset_basename: str | None = None,
 ) -> dict[str, Any]:
     del run_dir, dataset_basename
-    validate_args(signature_db_dir, old_prefix=old_prefix, new_prefix=new_prefix)
+    validate_args(signature_db_dir)
     prepare_output_dir(output_dir, overwrite)
 
     paths = build_slice_stage_paths(output_dir)
     stats = process_signature_db(
         signature_db_dir=signature_db_dir,
         slice_dir=paths['slice_dir'],
-        old_prefix=old_prefix,
-        new_prefix=new_prefix,
     )
     artifacts = path_strings(paths)
     write_stage_summary(paths['summary_json'], artifacts=artifacts, stats=stats)
