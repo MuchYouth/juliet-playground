@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import shutil
 import subprocess
@@ -24,6 +25,9 @@ DEFAULT_EVAL_BATCH_SIZE = 8
 DEFAULT_NUM_TRAIN_EPOCHS = 10
 PRIMARY_TARGET_NAME = 'primary'
 VULN_PATCH_TARGET_NAME = 'vuln_patch'
+TRAINING_LOSS_LOG_NAME = 'training_loss.log'
+TRAINING_LOSS_PLOT_NAME = 'train_loss_by_epoch.png'
+TRAIN_EPOCH_LOSS_PREFIX = 'TRAIN_EPOCH_LOSS '
 REQUIRED_COLUMNS = _bench_runner.REQUIRED_COLUMNS
 PRIMARY_REQUIRED_DATASET_TYPES = _bench_runner.PRIMARY_REQUIRED_DATASET_TYPES
 TEST_ONLY_REQUIRED_DATASET_TYPES = _bench_runner.TEST_ONLY_REQUIRED_DATASET_TYPES
@@ -63,6 +67,8 @@ class LineVulPaths:
     host_train_dataset_pkl: Path
     host_val_dataset_pkl: Path
     host_test_dataset_pkl: Path
+    host_training_loss_log: Path
+    host_training_loss_plot: Path
     host_best_model_dir: Path
     host_test_predictions_csv: Path
     host_line_vul_script: Path
@@ -203,6 +209,8 @@ def build_linevul_paths(
         host_train_dataset_pkl=host_dataset_dir / 'train_dataset.pkl',
         host_val_dataset_pkl=host_dataset_dir / 'val_dataset.pkl',
         host_test_dataset_pkl=host_dataset_dir / 'test_dataset.pkl',
+        host_training_loss_log=host_output_dir / TRAINING_LOSS_LOG_NAME,
+        host_training_loss_plot=host_output_dir / TRAINING_LOSS_PLOT_NAME,
         host_best_model_dir=host_output_dir / 'best_model',
         host_test_predictions_csv=host_output_dir / 'test_pred_with_code.csv',
         host_line_vul_script=(
@@ -278,6 +286,71 @@ def stage_reused_best_model(source_paths: LineVulPaths, target_paths: LineVulPat
         )
     except OSError:
         shutil.copytree(source_paths.host_best_model_dir, target_paths.host_best_model_dir)
+
+
+def _load_epoch_training_losses(paths: LineVulPaths) -> list[tuple[float, float]]:
+    if not paths.host_training_loss_log.exists():
+        raise RuntimeError(
+            f'Expected LineVul training loss log not found: {paths.host_training_loss_log}'
+        )
+
+    epoch_losses_by_epoch: dict[float, float] = {}
+    with paths.host_training_loss_log.open(encoding='utf-8') as f:
+        for line_no, raw_line in enumerate(f, start=1):
+            line = raw_line.strip()
+            if not line or not line.startswith(TRAIN_EPOCH_LOSS_PREFIX):
+                continue
+
+            payload_text = line[len(TRAIN_EPOCH_LOSS_PREFIX) :]
+            try:
+                payload = json.loads(payload_text)
+            except json.JSONDecodeError as exc:
+                raise RuntimeError(
+                    'Failed to parse LineVul training loss entry '
+                    f'at {paths.host_training_loss_log}:{line_no}: {exc.msg}'
+                ) from exc
+
+            if 'epoch' not in payload or 'loss' not in payload:
+                raise RuntimeError(
+                    'Expected epoch/loss keys in LineVul training loss entry '
+                    f'at {paths.host_training_loss_log}:{line_no}'
+                )
+
+            epoch_losses_by_epoch[float(payload['epoch'])] = float(payload['loss'])
+
+    epoch_losses = sorted(epoch_losses_by_epoch.items())
+    if not epoch_losses:
+        raise RuntimeError(
+            'Expected LineVul epoch training losses not found after training: '
+            f'{paths.host_training_loss_log}'
+        )
+    return epoch_losses
+
+
+def write_training_loss_plot(paths: LineVulPaths) -> Path:
+    import matplotlib
+
+    matplotlib.use('Agg')
+    import matplotlib.pyplot as plt
+
+    epoch_losses = _load_epoch_training_losses(paths)
+    plot_path = paths.host_training_loss_plot
+    plot_path.parent.mkdir(parents=True, exist_ok=True)
+
+    fig, ax = plt.subplots(figsize=(8, 5))
+    epochs = [epoch for epoch, _ in epoch_losses]
+    losses = [loss for _, loss in epoch_losses]
+    ax.plot(epochs, losses, marker='o', linewidth=2)
+    ax.set_xlabel('Epoch')
+    ax.set_ylabel('Training Loss')
+    ax.set_title('Training Loss by Epoch')
+    ax.grid(True, alpha=0.3)
+    if len(epochs) <= 20:
+        ax.set_xticks(epochs)
+    fig.tight_layout()
+    fig.savefig(plot_path, dpi=200)
+    plt.close(fig)
+    return plot_path
 
 
 def build_line_vul_command(
@@ -361,6 +434,15 @@ def print_planned_commands(
         print(f'Target [{paths.target_name}] Stage 07 CSV: {paths.source_csv}')
         print(f'Target [{paths.target_name}] Host dataset dir: {paths.host_dataset_dir}')
         print(f'Target [{paths.target_name}] Host output dir: {paths.host_output_dir}')
+        if paths.target_name == PRIMARY_TARGET_NAME:
+            print(
+                f'Target [{paths.target_name}] Host training loss log: '
+                f'{paths.host_training_loss_log}'
+            )
+            print(
+                f'Target [{paths.target_name}] Host training loss plot: '
+                f'{paths.host_training_loss_plot}'
+            )
         print(f'Target [{paths.target_name}] Container dataset dir: {paths.container_dataset_dir}')
         print(f'Target [{paths.target_name}] Container output dir: {paths.container_output_dir}')
     for step in commands:
@@ -372,6 +454,9 @@ def print_completion_summary(paths_list: Sequence[LineVulPaths]) -> None:
     for paths in paths_list:
         print(f'  - [{paths.target_name}] staged_csv: {paths.host_dataset_csv}')
         print(f'  - [{paths.target_name}] dataset_pickles: {paths.host_dataset_dir}')
+        if paths.target_name == PRIMARY_TARGET_NAME:
+            print(f'  - [{paths.target_name}] training_loss_log: {paths.host_training_loss_log}')
+            print(f'  - [{paths.target_name}] training_loss_plot: {paths.host_training_loss_plot}')
         print(f'  - [{paths.target_name}] best_model: {paths.host_best_model_dir}')
         print(f'  - [{paths.target_name}] test_predictions: {paths.host_test_predictions_csv}')
         print(f'  - [{paths.target_name}] logs: {paths.host_output_dir}')
@@ -428,6 +513,9 @@ def run_linevul_from_pipeline(config: LineVulRunConfig) -> int:
     print(f'Running LineVul train for {primary_train_step.paths.display_name}...')
     run_logged_command(primary_train_step.command, primary_paths.host_train_log)
     require_exists(primary_paths.host_best_model_dir / 'config.json', 'best_model/config.json')
+    require_exists(primary_paths.host_training_loss_log, TRAINING_LOSS_LOG_NAME)
+    plot_path = write_training_loss_plot(primary_paths)
+    print(f'Wrote LineVul training loss plot to {plot_path}')
 
     primary_test_step = next(
         step

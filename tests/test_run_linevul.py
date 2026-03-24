@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import csv
+import json
 import os
 from pathlib import Path
 
@@ -127,6 +128,14 @@ def _write_vuln_patch_csv(
             writer.writerow(payload)
 
 
+def _write_training_loss_log(path: Path, entries: list[tuple[float, float]]) -> None:
+    rows = [
+        f'TRAIN_EPOCH_LOSS {json.dumps({"epoch": epoch, "loss": loss})}\n'
+        for epoch, loss in entries
+    ]
+    write_text(path, ''.join(rows))
+
+
 def test_run_linevul_uses_latest_run_in_dry_run_mode(tmp_path, capsys):
     module = load_module_from_path('test_run_linevul_dry_run', REPO_ROOT / 'tools/run_linevul.py')
 
@@ -157,6 +166,8 @@ def test_run_linevul_uses_latest_run_in_dry_run_mode(tmp_path, capsys):
     assert '--prepare_dataset' in captured.out
     assert '--train' in captured.out
     assert '--test_predict' in captured.out
+    assert 'training_loss.log' in captured.out
+    assert 'train_loss_by_epoch.png' in captured.out
     assert not (
         vpbench_root / 'downloads' / 'RealVul' / 'datasets' / 'juliet-playground' / 'run-newer'
     ).exists()
@@ -226,6 +237,10 @@ def test_run_linevul_stages_csv_and_runs_prepare_train_test(tmp_path, monkeypatc
             write_text(host_dataset_dir / 'test_dataset.pkl', 'test\n')
         elif '--train' in command:
             write_text(host_output_dir / 'best_model' / 'config.json', '{}\n')
+            _write_training_loss_log(
+                host_output_dir / 'training_loss.log',
+                [(1.0, 0.8125), (2.0, 0.4375)],
+            )
         elif '--test_predict' in command:
             write_text(host_output_dir / 'test_pred_with_code.csv', 'label,pred\n1,1\n')
 
@@ -265,6 +280,8 @@ def test_run_linevul_stages_csv_and_runs_prepare_train_test(tmp_path, monkeypatc
         source_csv.read_text(encoding='utf-8')
     )
     assert host_output_dir.joinpath('best_model', 'config.json').exists()
+    assert host_output_dir.joinpath('training_loss.log').exists()
+    assert host_output_dir.joinpath('train_loss_by_epoch.png').exists()
     assert host_output_dir.joinpath('test_pred_with_code.csv').exists()
 
 
@@ -307,6 +324,10 @@ def test_run_linevul_reuses_primary_best_model_for_vuln_patch_eval(tmp_path, mon
             write_text(host_dataset_dir / 'test_dataset.pkl', 'test\n')
         elif log_path == host_output_dir / 'train.log':
             write_text(host_output_dir / 'best_model' / 'config.json', '{"model":"primary"}\n')
+            _write_training_loss_log(
+                host_output_dir / 'training_loss.log',
+                [(1.0, 0.91), (2.0, 0.53), (3.0, 0.22)],
+            )
         elif log_path == host_output_dir / 'test.log':
             write_text(host_output_dir / 'test_pred_with_code.csv', 'label,pred\n1,1\n')
         elif log_path == vuln_host_output_dir / 'prepare.log':
@@ -348,11 +369,108 @@ def test_run_linevul_reuses_primary_best_model_for_vuln_patch_eval(tmp_path, mon
         vuln_patch_csv.read_text(encoding='utf-8')
     )
     assert host_output_dir.joinpath('best_model', 'config.json').exists()
+    assert host_output_dir.joinpath('training_loss.log').exists()
+    assert host_output_dir.joinpath('train_loss_by_epoch.png').exists()
     assert vuln_host_output_dir.joinpath('best_model', 'config.json').exists()
     assert vuln_host_output_dir.joinpath('test_pred_with_code.csv').exists()
+    assert not vuln_host_output_dir.joinpath('training_loss.log').exists()
+    assert not vuln_host_output_dir.joinpath('train_loss_by_epoch.png').exists()
     assert not vuln_host_output_dir.joinpath('train.log').exists()
     if vuln_host_output_dir.joinpath('best_model').is_symlink():
         assert not os.path.isabs(os.readlink(vuln_host_output_dir / 'best_model'))
+
+
+def test_load_epoch_training_losses_ignores_non_matching_lines_and_overwrites_duplicates(tmp_path):
+    module = load_module_from_path(
+        'test_run_linevul_parse_training_loss_log',
+        REPO_ROOT / 'tools/run_linevul.py',
+    )
+
+    run_dir = tmp_path / 'pipeline-runs' / 'run-demo'
+    vpbench_root = _make_vpbench_root(tmp_path / 'VP-Bench')
+    config = module.normalize_config(
+        module.LineVulRunConfig(
+            run_dir=run_dir,
+            pipeline_root=tmp_path / 'pipeline-runs',
+            vpbench_root=vpbench_root,
+            container_name='linevul',
+            tokenizer_name=module.DEFAULT_TOKENIZER_NAME,
+            model_name=module.DEFAULT_MODEL_NAME,
+            train_batch_size=module.DEFAULT_TRAIN_BATCH_SIZE,
+            eval_batch_size=module.DEFAULT_EVAL_BATCH_SIZE,
+            num_train_epochs=module.DEFAULT_NUM_TRAIN_EPOCHS,
+            overwrite=False,
+            dry_run=False,
+        )
+    )
+    paths = module.build_linevul_paths(config, run_dir, target_name=module.PRIMARY_TARGET_NAME)
+    write_text(
+        paths.host_training_loss_log,
+        '\n'.join(
+            [
+                'ignored',
+                'TRAIN_EPOCH_LOSS {"epoch": 2.0, "loss": 0.8}',
+                'TRAIN_EPOCH_LOSS {"epoch": 1.0, "loss": 0.9}',
+                'TRAIN_EPOCH_LOSS {"epoch": 2.0, "loss": 0.4}',
+                '',
+            ]
+        ),
+    )
+
+    assert module._load_epoch_training_losses(paths) == [(1.0, 0.9), (2.0, 0.4)]
+
+
+def test_run_linevul_fails_when_training_loss_log_is_missing(tmp_path, monkeypatch, capsys):
+    module = load_module_from_path(
+        'test_run_linevul_missing_training_loss_log',
+        REPO_ROOT / 'tools/run_linevul.py',
+    )
+
+    run_dir = tmp_path / 'pipeline-runs' / 'run-demo'
+    source_csv = run_dir / '07_dataset_export' / 'Real_Vul_data.csv'
+    _write_stage07_csv(source_csv)
+    vpbench_root = _make_vpbench_root(tmp_path / 'VP-Bench')
+
+    host_dataset_dir = (
+        vpbench_root / 'downloads' / 'RealVul' / 'datasets' / 'juliet-playground' / 'run-demo'
+    )
+    host_output_dir = (
+        vpbench_root
+        / 'baseline'
+        / 'RealVul'
+        / 'Experiments'
+        / 'LineVul'
+        / 'juliet-playground'
+        / 'run-demo'
+    )
+
+    def fake_run_logged_command(command, log_path):
+        write_text(log_path, '$ ' + ' '.join(command) + '\n')
+        if '--prepare_dataset' in command:
+            write_text(host_dataset_dir / 'train_dataset.pkl', 'train\n')
+            write_text(host_dataset_dir / 'val_dataset.pkl', 'val\n')
+            write_text(host_dataset_dir / 'test_dataset.pkl', 'test\n')
+        elif '--train' in command:
+            write_text(host_output_dir / 'best_model' / 'config.json', '{}\n')
+        elif '--test_predict' in command:
+            write_text(host_output_dir / 'test_pred_with_code.csv', 'label,pred\n1,1\n')
+
+    monkeypatch.setattr(module, 'check_container_running', lambda _container_name: None)
+    monkeypatch.setattr(module, 'run_logged_command', fake_run_logged_command)
+
+    result = run_module_main(
+        module,
+        [
+            '--run-dir',
+            str(run_dir),
+            '--vpbench-root',
+            str(vpbench_root),
+        ],
+    )
+
+    assert result == 1
+    captured = capsys.readouterr()
+    assert 'training_loss.log' in captured.err
 
 
 def test_cleanup_output_targets_falls_back_to_container_rm_on_permission_error(
