@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import argparse
-import csv
 import os
 import re
 import shlex
@@ -13,9 +12,9 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Sequence
 
+from shared import bench_runner as _bench_runner
 from shared.artifact_layout import build_dataset_export_paths
 from shared.paths import RESULT_DIR
-from shared.pipeline_runs import find_latest_pipeline_run_dir
 
 JULIET_PDBERT_NAMESPACE = 'juliet-playground'
 DEFAULT_VPBENCH_ROOT = Path('/home/sojeon/Desktop/VP-Bench')
@@ -25,14 +24,9 @@ DEFAULT_ANALYZE_BATCH_SIZE = 32
 DEFAULT_CUDA_DEVICE = 0
 PRIMARY_TARGET_NAME = 'primary'
 VULN_PATCH_TARGET_NAME = 'vuln_patch'
-REQUIRED_COLUMNS = {
-    'processed_func',
-    'vulnerable_line_numbers',
-    'dataset_type',
-    'target',
-}
-PRIMARY_REQUIRED_DATASET_TYPES = frozenset({'train_val', 'test'})
-TEST_ONLY_REQUIRED_DATASET_TYPES = frozenset({'test'})
+REQUIRED_COLUMNS = _bench_runner.REQUIRED_COLUMNS
+PRIMARY_REQUIRED_DATASET_TYPES = _bench_runner.PRIMARY_REQUIRED_DATASET_TYPES
+TEST_ONLY_REQUIRED_DATASET_TYPES = _bench_runner.TEST_ONLY_REQUIRED_DATASET_TYPES
 MODEL_ARTIFACT_NAMES = ('config.json', 'model.tar.gz', 'vocabulary', 'archive')
 CONTAINER_PDBERT_ROOT = Path('/PDBERT')
 CONTAINER_DATASET_BASE = CONTAINER_PDBERT_ROOT / 'data' / 'datasets' / 'extrinsic' / 'vul_detect'
@@ -148,14 +142,19 @@ def validate_config(config: PDBERTRunConfig) -> None:
 
 
 def resolve_run_dir(config: PDBERTRunConfig) -> Path:
-    if config.run_dir is not None:
-        if not config.run_dir.exists():
-            raise ValueError(f'Pipeline run dir not found: {config.run_dir}')
-        return config.run_dir
-    try:
-        return find_latest_pipeline_run_dir(config.pipeline_root)
-    except FileNotFoundError as exc:
-        raise ValueError(str(exc)) from exc
+    return _bench_runner.resolve_run_dir(
+        run_dir=config.run_dir,
+        pipeline_root=config.pipeline_root,
+    )
+
+
+validate_stage07_csv = _bench_runner.validate_stage07_csv
+_existing_output_targets = _bench_runner.existing_output_targets
+_remove_host_output_path = _bench_runner.remove_host_output_path
+stage_source_csv = _bench_runner.stage_source_csv
+check_container_running = _bench_runner.check_container_running
+run_logged_command = _bench_runner.run_logged_command
+require_exists = _bench_runner.require_exists
 
 
 def _target_relative_parts(target_name: str) -> tuple[str, ...]:
@@ -285,126 +284,28 @@ def discover_pdbert_targets(config: PDBERTRunConfig, run_dir: Path) -> list[PDBE
     return targets
 
 
-def validate_stage07_csv(
-    path: Path,
-    *,
-    required_dataset_types: frozenset[str] = PRIMARY_REQUIRED_DATASET_TYPES,
-) -> dict[str, int]:
-    with path.open(newline='', encoding='utf-8') as f:
-        reader = csv.DictReader(f)
-        fieldnames = set(reader.fieldnames or [])
-        missing_columns = sorted(REQUIRED_COLUMNS - fieldnames)
-        if missing_columns:
-            raise ValueError(
-                f'Stage 07 dataset CSV missing required columns: {", ".join(missing_columns)}'
-            )
-
-        dataset_type_counts: dict[str, int] = {}
-        row_count = 0
-        for row in reader:
-            row_count += 1
-            dataset_type = str(row.get('dataset_type') or '').strip()
-            dataset_type_counts[dataset_type] = dataset_type_counts.get(dataset_type, 0) + 1
-
-    if row_count == 0:
-        raise ValueError(f'Stage 07 dataset CSV is empty: {path}')
-
-    missing_dataset_types = sorted(
-        label for label in required_dataset_types if dataset_type_counts.get(label, 0) == 0
-    )
-    if missing_dataset_types:
-        if required_dataset_types == PRIMARY_REQUIRED_DATASET_TYPES:
-            raise ValueError(
-                'Stage 07 dataset CSV must contain both train_val and test rows; '
-                f'missing: {", ".join(missing_dataset_types)}'
-            )
-        if required_dataset_types == TEST_ONLY_REQUIRED_DATASET_TYPES:
-            raise ValueError(
-                'Stage 07 dataset CSV must contain test rows; '
-                f'missing: {", ".join(missing_dataset_types)}'
-            )
-        raise ValueError(
-            'Stage 07 dataset CSV missing required dataset_type rows: '
-            f'{", ".join(missing_dataset_types)}'
-        )
-    return dataset_type_counts
-
-
-def _existing_output_targets(paths_list: Sequence[PDBERTPaths]) -> list[Path]:
-    existing: list[Path] = []
-    for paths in paths_list:
-        for path in (paths.host_dataset_dir, paths.host_output_dir):
-            if path.exists() or path.is_symlink():
-                existing.append(path)
-    return list(dict.fromkeys(existing))
-
-
 def ensure_output_targets(paths_list: Sequence[PDBERTPaths], *, overwrite: bool) -> None:
-    unique_existing = _existing_output_targets(paths_list)
-    if unique_existing and not overwrite:
-        joined = ', '.join(str(path) for path in unique_existing)
-        run_names = ', '.join(dict.fromkeys(paths.display_name for paths in paths_list))
-        raise ValueError(
-            f'PDBERT output already exists for run {run_names}: {joined} '
-            '(use --overwrite to replace it)'
-        )
-
-
-def _remove_host_output_path(path: Path) -> None:
-    if path.is_symlink() or path.is_file():
-        path.unlink()
-    elif path.exists():
-        shutil.rmtree(path)
+    _bench_runner.ensure_output_targets(paths_list, overwrite=overwrite, runner_name='PDBERT')
 
 
 def _remove_output_targets_via_container(container_name: str, paths: PDBERTPaths) -> None:
-    result = subprocess.run(
-        [
-            'docker',
-            'exec',
-            container_name,
-            'rm',
-            '-rf',
-            str(paths.container_dataset_dir),
-            str(paths.container_output_dir),
-        ],
-        check=False,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        text=True,
+    _bench_runner.remove_output_targets_via_container(
+        container_name=container_name,
+        paths=paths,
+        runner_name='PDBERT',
+        subprocess_run=subprocess.run,
     )
-    if result.returncode != 0:
-        message = result.stderr.strip() or result.stdout.strip() or 'unknown docker rm error'
-        raise RuntimeError(
-            'Failed to clean PDBERT output via container '
-            f'{container_name} for {paths.display_name}: {message}'
-        )
 
 
 def cleanup_output_targets(paths_list: Sequence[PDBERTPaths], *, container_name: str) -> None:
-    for paths in paths_list:
-        try:
-            for path in sorted(
-                (paths.host_dataset_dir, paths.host_output_dir),
-                key=lambda item: (len(item.parts), str(item)),
-                reverse=True,
-            ):
-                _remove_host_output_path(path)
-        except PermissionError:
-            _remove_output_targets_via_container(container_name, paths)
-            for path in sorted(
-                (paths.host_dataset_dir, paths.host_output_dir),
-                key=lambda item: (len(item.parts), str(item)),
-                reverse=True,
-            ):
-                if path.exists() or path.is_symlink():
-                    _remove_host_output_path(path)
-
-
-def stage_source_csv(paths: PDBERTPaths) -> None:
-    paths.host_dataset_dir.mkdir(parents=True, exist_ok=True)
-    paths.host_output_dir.mkdir(parents=True, exist_ok=True)
-    shutil.copy2(paths.source_csv, paths.host_dataset_csv)
+    _bench_runner.cleanup_output_targets(
+        paths_list,
+        remove_host_output_path_fn=_remove_host_output_path,
+        remove_container_targets_fn=lambda paths: _remove_output_targets_via_container(
+            container_name,
+            paths,
+        ),
+    )
 
 
 def _rewrite_data_base_path(template_text: str, data_base_path: Path) -> str:
@@ -554,21 +455,6 @@ def build_analyze_setup_command(paths: PDBERTPaths, *, container_name: str) -> l
     ]
 
 
-def check_container_running(container_name: str) -> None:
-    result = subprocess.run(
-        ['docker', 'inspect', '--format', '{{.State.Running}}', container_name],
-        check=False,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        text=True,
-    )
-    if result.returncode != 0:
-        message = result.stderr.strip() or result.stdout.strip() or 'unknown docker inspect error'
-        raise RuntimeError(f'Failed to inspect Docker container {container_name}: {message}')
-    if result.stdout.strip().lower() != 'true':
-        raise RuntimeError(f'Docker container is not running: {container_name}')
-
-
 def copy_analyze_script_to_container(paths: PDBERTPaths, container_name: str) -> None:
     command = build_analyze_setup_command(paths, container_name=container_name)
     result = subprocess.run(
@@ -584,36 +470,6 @@ def copy_analyze_script_to_container(paths: PDBERTPaths, container_name: str) ->
             'Failed to copy PDBERT analyze script to container '
             f'{container_name} for {paths.display_name}: {message}'
         )
-
-
-def run_logged_command(command: Sequence[str], log_path: Path) -> None:
-    log_path.parent.mkdir(parents=True, exist_ok=True)
-    with log_path.open('w', encoding='utf-8') as log_fp:
-        log_fp.write(f'$ {" ".join(command)}\n')
-        log_fp.flush()
-        process = subprocess.Popen(
-            list(command),
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
-            text=True,
-            bufsize=1,
-        )
-        assert process.stdout is not None
-        try:
-            for line in process.stdout:
-                print(line, end='')
-                log_fp.write(line)
-                log_fp.flush()
-        finally:
-            process.stdout.close()
-        return_code = process.wait()
-    if return_code != 0:
-        raise subprocess.CalledProcessError(return_code, list(command))
-
-
-def require_exists(path: Path, label: str) -> None:
-    if not path.exists():
-        raise RuntimeError(f'Expected {label} not found: {path}')
 
 
 def build_command_steps(
