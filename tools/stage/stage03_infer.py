@@ -33,7 +33,7 @@ TOTAL_CORES = os.cpu_count() or 4
 # Conservative memory-aware parallelization to prevent OOM
 # Each infer process uses ~500MB-1GB memory
 CORES_PER_JOB = 1
-MAX_PARALLEL_JOBS = TOTAL_CORES  # Conservative: one job per core
+MAX_PARALLEL_JOBS = min(TOTAL_CORES, TOTAL_CORES // 2)  # Conservative: one job per core
 MAX_CWE_PARALLEL = 1  # Process CWEs sequentially to control memory usage
 VALID_EXTENSIONS = {'c', 'cpp'}
 WINDOWS_SPECIFIC_MARKERS = ('w32', 'wchar_t')
