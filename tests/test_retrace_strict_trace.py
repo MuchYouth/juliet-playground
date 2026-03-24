@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
 from tests.helpers import REPO_ROOT, load_module_from_path, run_module_main, write_text
 
 
@@ -24,23 +26,13 @@ def test_retrace_cli_defaults_to_pruning_single_child_flows(monkeypatch):
     assert captured['prune_single_child_flows'] is True
 
 
-def test_retrace_cli_keep_single_child_flows_disables_pruning(monkeypatch):
+def test_retrace_cli_removed_keep_single_child_flows_option_is_rejected():
     module = load_module_from_path(
-        'test_retrace_strict_trace_keep_single_child_flag',
+        'test_retrace_strict_trace_removed_keep_single_child_flag',
         REPO_ROOT / 'tools/retrace_strict_trace.py',
     )
-    captured: dict[str, object] = {}
-
-    def fake_run_retrace_strict_trace(**kwargs):
-        captured.update(kwargs)
-        return {'artifacts': {}, 'stats': {}}
-
-    monkeypatch.setattr(module, 'run_retrace_strict_trace', fake_run_retrace_strict_trace)
-
-    result = run_module_main(module, ['run-demo', '--keep-single-child-flows'])
-
-    assert result == 0
-    assert captured['prune_single_child_flows'] is False
+    with pytest.raises(SystemExit):
+        run_module_main(module, ['run-demo', '--keep-single-child-flows'])
 
 
 def test_retrace_cli_passes_source_root(monkeypatch, tmp_path):

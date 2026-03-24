@@ -29,11 +29,6 @@ def main() -> int:
         type=Path,
         default=Path('experiments/epic001c_testcase_flow_partition/outputs/summary.json'),
     )
-    parser.add_argument(
-        '--keep-single-child-flows',
-        dest='prune_single_child_flows',
-        action='store_false',
-    )
     parser.set_defaults(prune_single_child_flows=True)
     args = parser.parse_args()
 

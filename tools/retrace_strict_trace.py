@@ -42,12 +42,6 @@ def parse_args() -> argparse.Namespace:
         help='Replace an existing non-empty retrace output directory.',
     )
     parser.add_argument(
-        '--keep-single-child-flows',
-        dest='prune_single_child_flows',
-        action='store_false',
-        help='Keep flow tags that have exactly one child after Stage 02b dedup.',
-    )
-    parser.add_argument(
         '--source-root',
         type=Path,
         default=None,

@@ -56,10 +56,8 @@ class FullRunConfig:
     committed_taint_config: Path
     pair_split_seed: int
     pair_train_ratio: float
-    dedup_mode: str
     enable_pair: bool
     prune_single_child_flows: bool
-    use_epic002_for_02a: bool
 
 
 def parse_args() -> argparse.Namespace:
@@ -97,23 +95,13 @@ def parse_args() -> argparse.Namespace:
     )
     full.add_argument('--pair-split-seed', type=int, default=1234)
     full.add_argument('--pair-train-ratio', type=float, default=0.8)
-    full.add_argument('--dedup-mode', choices=['none', 'row'], default='row')
-    pair_mode = full.add_mutually_exclusive_group()
-    pair_mode.add_argument('--enable-pair', dest='enable_pair', action='store_true')
-    pair_mode.add_argument('--disable-pair', dest='enable_pair', action='store_false')
     full.add_argument(
-        '--keep-single-child-flows',
-        dest='prune_single_child_flows',
-        action='store_false',
-        help='Keep flow tags that have exactly one child after Stage 02b dedup.',
+        '--enable-pair',
+        dest='enable_pair',
+        action='store_true',
+        help='Use the legacy pair-first export path instead of the default trace-first path.',
     )
-    full.add_argument(
-        '--disable-epic002-for-02a',
-        dest='use_epic002_for_02a',
-        action='store_false',
-        help='Use 01_manifest/manifest_with_comments.xml directly for Stage 02a.',
-    )
-    full.set_defaults(enable_pair=True, prune_single_child_flows=True, use_epic002_for_02a=True)
+    full.set_defaults(enable_pair=False, prune_single_child_flows=True)
 
     return parser.parse_args()
 
@@ -185,8 +173,6 @@ def _validate_full_inputs(config: FullRunConfig) -> None:
         raise ValueError('Provide cwes, use --all, or use --files')
     if not (0.0 < config.pair_train_ratio < 1.0):
         raise ValueError(f'pair_train_ratio must be between 0 and 1: {config.pair_train_ratio}')
-    if config.dedup_mode not in {'none', 'row'}:
-        raise ValueError(f'dedup_mode must be one of: none, row (got {config.dedup_mode})')
 
 
 def _normalize_full_run_config(config: FullRunConfig) -> FullRunConfig:
@@ -201,10 +187,8 @@ def _normalize_full_run_config(config: FullRunConfig) -> FullRunConfig:
         committed_taint_config=config.committed_taint_config.resolve(),
         pair_split_seed=config.pair_split_seed,
         pair_train_ratio=config.pair_train_ratio,
-        dedup_mode=config.dedup_mode,
         enable_pair=config.enable_pair,
         prune_single_child_flows=config.prune_single_child_flows,
-        use_epic002_for_02a=config.use_epic002_for_02a,
     )
 
 
@@ -484,26 +468,16 @@ def run_full_pipeline(config: FullRunConfig) -> int:
             manifest=config.manifest,
             source_root=config.source_root,
         )
-        if config.use_epic002_for_02a:
-            run_step02b_flow_build(
-                paths=paths,
-                prune_single_child_flows=config.prune_single_child_flows,
-            )
-            run_step02b_epic002_classification(paths=paths)
-            run_step02a_code_field_inventory(
-                paths=paths,
-                source_root=config.source_root,
-                input_xml=paths['stage02b_epic002']['source_sink_classified_xml'],
-            )
-        else:
-            run_step02a_code_field_inventory(
-                paths=paths,
-                source_root=config.source_root,
-            )
-            run_step02b_flow_build(
-                paths=paths,
-                prune_single_child_flows=config.prune_single_child_flows,
-            )
+        run_step02b_flow_build(
+            paths=paths,
+            prune_single_child_flows=config.prune_single_child_flows,
+        )
+        run_step02b_epic002_classification(paths=paths)
+        run_step02a_code_field_inventory(
+            paths=paths,
+            source_root=config.source_root,
+            input_xml=paths['stage02b_epic002']['source_sink_classified_xml'],
+        )
 
         selected_taint_config, _ = _select_taint_config(
             generated_taint_config=paths['generated_taint_config'],
@@ -527,11 +501,11 @@ def run_full_pipeline(config: FullRunConfig) -> int:
                 paths=paths,
                 pair_split_seed=config.pair_split_seed,
                 pair_train_ratio=config.pair_train_ratio,
-                dedup_mode=config.dedup_mode,
+                dedup_mode='row',
             )
             run_step07b_train_patched_counterparts(
                 paths=paths,
-                dedup_mode=config.dedup_mode,
+                dedup_mode='row',
             )
         else:
             run_step05_trace_dataset(paths=paths)
@@ -540,7 +514,7 @@ def run_full_pipeline(config: FullRunConfig) -> int:
                 paths=paths,
                 pair_split_seed=config.pair_split_seed,
                 pair_train_ratio=config.pair_train_ratio,
-                dedup_mode=config.dedup_mode,
+                dedup_mode='row',
             )
     except Exception as exc:
         print(str(exc), file=sys.stderr)
@@ -563,10 +537,8 @@ def main() -> int:
                 committed_taint_config=args.committed_taint_config,
                 pair_split_seed=args.pair_split_seed,
                 pair_train_ratio=args.pair_train_ratio,
-                dedup_mode=args.dedup_mode,
                 enable_pair=args.enable_pair,
                 prune_single_child_flows=args.prune_single_child_flows,
-                use_epic002_for_02a=args.use_epic002_for_02a,
             )
         )
     except ValueError as exc:

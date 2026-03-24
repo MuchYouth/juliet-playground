@@ -58,7 +58,18 @@
 
 현재 공개 CLI인 `tools/run_pipeline.py full` 의 실제 실행 순서는 아래와 같습니다.
 
-- 기본 pair 모드:
+- 기본 trace-first 모드:
+  1. `01_manifest_comment_scan`
+  2. `02b_testcase_flow_partition`
+  3. `02b_epic002_classification`
+  4. `02a_code_field_inventory`
+  5. taint config 선택 (`tools/run_pipeline.py` 내부 분기)
+  6. `03_infer_and_signature`
+  7. `04_trace_flow_filter`
+  8. `05_trace_dataset`
+  9. `06_trace_slices`
+  10. `07_trace_dataset_export`
+- `--enable-pair` 모드:
   1. `01_manifest_comment_scan`
   2. `02b_testcase_flow_partition`
   3. `02b_epic002_classification`
@@ -70,20 +81,9 @@
   9. `06_generate_slices`
   10. `07_dataset_export`
   11. `07b_train_patched_counterparts_export`
-- `--disable-pair` 모드:
-  1. `01_manifest_comment_scan`
-  2. `02b_testcase_flow_partition`
-  3. `02b_epic002_classification`
-  4. `02a_code_field_inventory`
-  5. taint config 선택 (`tools/run_pipeline.py` 내부 분기)
-  6. `03_infer_and_signature`
-  7. `04_trace_flow_filter`
-  8. `05_trace_dataset`
-  9. `06_trace_slices`
-  10. `07_trace_dataset_export`
 
-`--disable-epic002-for-02a` 를 사용하면 Stage 02a는 기본값과 달리
-`01_manifest/manifest_with_comments.xml` 을 직접 입력으로 사용합니다.
+Stage 02a는 `02b_epic002_classification` 의
+`source_sink_classified.xml` 을 입력으로 사용합니다.
 
 아래의 `02b_function_inventory_extract`, `02b_function_inventory_categorize` 섹션은
 여전히 실험/참조 스크립트 문맥에서는 유효하지만, 현재 `full` CLI가 직접 호출하는
@@ -103,10 +103,7 @@
 - `--committed-taint-config`
 - `--pair-split-seed`
 - `--pair-train-ratio`
-- `--dedup-mode`
-- `--enable-pair` / `--disable-pair`
-- `--keep-single-child-flows`
-- `--disable-epic002-for-02a`
+- `--enable-pair`
 
 기본 run 디렉터리는 다음 구조를 사용합니다.
 
@@ -566,7 +563,7 @@ Stage 01 테스트는 아래 두 층으로 나누는 것이 좋습니다.
 - 같은 `(file, line)` 에 `manifest_flaw` 가 여러 개 있으면, file명의 CWE prefix와 `name` 의
   CWE prefix가 모두 비교 가능하고 그중 일치하는 항목이 있을 때만 불일치 `manifest_flaw` 를 제거합니다.
 - 기본 동작에서는 dedup 후 child가 1개뿐인 `<flow>` 는 생성하지 않습니다.
-  필요하면 `--keep-single-child-flows` 또는 `prune_single_child_flows=False` 로 유지할 수 있습니다.
+  필요하면 `prune_single_child_flows=False` 로 유지할 수 있습니다.
 
 ### downstream이 실제로 쓰는 필드
 다음 단계(`04_trace_flow_filter`)는 flow XML에서 적어도 아래 정보를 사용합니다.
@@ -1141,10 +1138,10 @@ Stage 01 테스트는 아래 두 층으로 나누는 것이 좋습니다.
 
 ---
 
-## 11a. `07_trace_dataset_export` (`--disable-pair` 모드)
+## 11a. `07_trace_dataset_export` (기본 trace-first 모드)
 
 ### 실행 위치
-- `tools/run_pipeline.py full --disable-pair` 내부 함수 호출
+- `tools/run_pipeline.py full` 내부 함수 호출
 - 구현 함수: `export_trace_dataset_from_pipeline()`
 
 ### 입력
@@ -1340,8 +1337,8 @@ Stage 01 테스트는 아래 두 층으로 나누는 것이 좋습니다.
   현재 오케스트레이션에서는 **한 번의 실행 단계**입니다.
 - `06` 과 `07` 도 개념적으로 묶을 수 있지만 현재 코드는
   **서로 다른 산출물 존재 여부를 따로 검사**합니다.
-- `07b` 는 pair 모드에서만 실행됩니다.
-- `--disable-pair` 모드에서는 `07_trace_dataset_export` 가 `vuln_patch/` holdout까지 함께 생성합니다.
+- `07b` 는 `--enable-pair` 모드에서만 실행됩니다.
+- 기본 trace-first 모드에서는 `07_trace_dataset_export` 가 `vuln_patch/` holdout까지 함께 생성합니다.
 - `selected_taint_config` 는 파일명이 아니라 `tools/run_pipeline.py` 내부에서 결정되는 값입니다.
 
 ---

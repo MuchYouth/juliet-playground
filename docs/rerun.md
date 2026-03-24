@@ -15,16 +15,15 @@ python tools/run_pipeline.py full 78 89
 # 전체 CWE
 python tools/run_pipeline.py full --all
 
-# Stage 02a를 legacy manifest 입력으로 되돌리기
+# pair 기반 기존 흐름으로 실행
 python tools/run_pipeline.py full 78 \
-  --disable-epic002-for-02a
+  --enable-pair
 
 # 재현성 옵션 예시
 python tools/run_pipeline.py full 78 \
   --run-id run-my-fixed-id \
   --pair-split-seed 1234 \
-  --pair-train-ratio 0.8 \
-  --dedup-mode row
+  --pair-train-ratio 0.8
 ```
 
 ### 2) 산출물 비교
@@ -54,11 +53,9 @@ python tools/compare-artifacts.py \
 - `--run-id`: pipeline run 디렉터리 이름을 고정
 - `--pair-split-seed`: pair-level train/test split 난수 시드
 - `--pair-train-ratio`: train_val 비율 (`0 < ratio < 1`)
-- `--dedup-mode`:
-  - `row`: normalized slice 기준 row-level dedup 적용
-  - `none`: dedup 비활성화
+- `tools/run_pipeline.py full` 은 dataset export에서 row-level dedup을 고정 사용합니다.
 
-현재 구현에서 `row` 모드는
+현재 구현에서 row-level dedup은
 `md5("".join(normalized_code.split()))` 기준으로 해시를 만들고,
 중복 또는 label collision이 발생한 pair를 걸러냅니다.
 
@@ -104,7 +101,4 @@ python tools/retrace_strict_trace.py run-2026.03.17-15:11:12 \
 python tools/retrace_strict_trace.py run-2026.03.17-15:11:12 \
   --overwrite
 
-# Stage 02b의 single-child flow pruning을 끄기
-python tools/retrace_strict_trace.py run-2026.03.17-15:11:12 \
-  --keep-single-child-flows
 ```
