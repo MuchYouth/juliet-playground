@@ -206,13 +206,17 @@ python tools/run_linevul.py \
   --dry-run
 
 # 최신 pipeline run의 Real_Vul_data.csv 를 VP-Bench pdbert 컨테이너로 넘겨
-# prepare -> train -> test -> analyze 실행
-# vuln_patch/Real_Vul_data.csv 가 있으면 같은 model.tar.gz 로 추가 prepare -> test -> analyze 실행
-python tools/run_pdbert.py
+# primary dataset 에 대해 prepare -> train -> test -> analyze 실행
+# vuln_patch/Real_Vul_data.csv 가 있으면 --raw-model-dir 가 필요하고,
+# 학습된 primary model 로 prepare -> test -> analyze,
+# raw baseline 으로 raw_test -> raw_analyze 를 추가 실행
+python tools/run_pdbert.py \
+  --raw-model-dir /home/sojeon/Desktop/VP-Bench/downloads/PDBERT/data/models/pdbert-base
 
 # 특정 run 대상 dry-run
 python tools/run_pdbert.py \
   --run-dir artifacts/pipeline-runs/run-2026.03.18-04:05:48 \
+  --raw-model-dir /home/sojeon/Desktop/VP-Bench/downloads/PDBERT/data/models/pdbert-base \
   --dry-run
 
 # 두 pipeline run 또는 dataset export 디렉터리 비교
@@ -254,19 +258,34 @@ python tools/compare-artifacts.py \
   `prepare_dataset.py` -> `train_eval_from_config.py` -> `analyze_prediction.py` 를 실행합니다.
 - 기본적으로 `processed_func` 컬럼을 직접 사용하므로, Stage 07 CSV를 그대로 넘길 수 있습니다.
 - 같은 run에 `07_dataset_export/vuln_patch/Real_Vul_data.csv` 가 있으면
-  primary dataset 학습이 끝난 뒤 같은 `model.tar.gz` / `config.json` 을 재사용해서
-  vuln_patch dataset 에 대해 `prepare -> test -> analyze` 를 추가로 실행합니다.
+  `--raw-model-dir` 가 필수입니다.
+- `--raw-model-dir` 는 두 형식을 받습니다.
+  - AllenNLP archive dir: `config.json`, `model.tar.gz`
+  - pretrained backbone dir: `config.json`, `pytorch_model.bin`, tokenizer 자산
+- vuln_patch 가 있을 때는 다음이 추가됩니다.
+  - 학습된 primary `model.tar.gz` / `config.json` 을 재사용해
+    vuln_patch dataset 에 대해 `prepare -> test -> analyze`
+  - `--raw-model-dir` 를 `raw_model_eval/` 로 준비해
+    raw baseline 에 대해 `raw_test -> raw_analyze`
+- pretrained backbone dir 를 넘기면 raw baseline 의미는
+  `pretrained encoder + 랜덤 초기화 downstream classifier head` 입니다.
+  즉 raw baseline 은 fine-tuning 없이 vuln_patch 에 대해서만 평가됩니다.
 - 기본 대상 경로:
   - VP-Bench root: `/home/sojeon/Desktop/VP-Bench`
   - container: `pdbert`
-- 결과는 기본적으로 VP-Bench 쪽에만 저장됩니다.
-  - dataset staging:
-    `downloads/PDBERT/data/datasets/extrinsic/vul_detect/juliet-playground/<run-id>/primary/`
-  - model/output:
+- 결과는 기본적으로 VP-Bench 쪽에 저장됩니다.
+  - primary dataset staging:
+    `downloads/PDBERT/data/datasets/extrinsic/vul_detect/juliet-playground/<run-id>/primary/vpbench/Real_Vul/`
+  - primary model/output:
     `downloads/PDBERT/data/models/extrinsic/vul_detect/juliet-playground/<run-id>/primary/`
-  - vuln_patch staging/output:
-    `downloads/PDBERT/data/datasets/extrinsic/vul_detect/juliet-playground/<run-id>/vuln_patch/`
+  - vuln_patch dataset staging:
+    `downloads/PDBERT/data/datasets/extrinsic/vul_detect/juliet-playground/<run-id>/vuln_patch/realvul_test/Real_Vul/`
+  - vuln_patch model/output:
     `downloads/PDBERT/data/models/extrinsic/vul_detect/juliet-playground/<run-id>/vuln_patch/`
+  - raw baseline output:
+    `downloads/PDBERT/data/models/extrinsic/vul_detect/juliet-playground/<run-id>/vuln_patch/raw_model_eval/`
+- feature export / t-SNE 산출물은 primary analyze, vuln_patch analyze,
+  raw baseline analyze 에서 각각 생성됩니다.
 
 ## 메모
 
