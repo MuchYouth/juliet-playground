@@ -53,6 +53,13 @@ Also:
 - `python3 -m venv .venv && source .venv/bin/activate && pip install -r requirements.txt`
 - `source .venv/bin/activate && pre-commit install`
 
+## Pre-commit Hook
+- This repo uses `pre-commit`, but Git hooks are local to each clone.
+- Before assuming the hook is active, check whether `.git/hooks/pre-commit` exists.
+- If it is missing, inform the user that the hook has not been installed for this clone and offer to run `source .venv/bin/activate && pre-commit install`.
+- Do not install the hook automatically without explicit user approval.
+- Do not assume `git clone` makes the hook active for other users.
+
 ## Validation
 ### Required for most Python changes
 - `source .venv/bin/activate && ruff check .`
