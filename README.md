@@ -200,6 +200,10 @@ python tools/retrace_strict_trace.py run-2026.03.17-15:11:12
 # vuln_patch/Real_Vul_data.csv 가 있으면 같은 best_model 로 추가 prepare -> test 실행
 python tools/run_linevul.py
 
+# VP-Bench root 가 기본 위치가 아니면 명시
+python tools/run_linevul.py \
+  --vpbench-root /path/to/VP-Bench
+
 # 특정 run 대상 dry-run
 python tools/run_linevul.py \
   --run-dir artifacts/pipeline-runs/run-2026.03.17-11:28:48 \
@@ -212,6 +216,11 @@ python tools/run_linevul.py \
 # raw baseline 으로 raw_test -> raw_analyze 를 추가 실행
 python tools/run_pdbert.py \
   --raw-model-dir /home/sojeon/Desktop/VP-Bench/downloads/PDBERT/data/models/pdbert-base
+
+# VP-Bench root 가 기본 위치가 아니면 명시
+python tools/run_pdbert.py \
+  --vpbench-root /path/to/VP-Bench \
+  --raw-model-dir /path/to/VP-Bench/downloads/PDBERT/data/models/pdbert-base
 
 # 특정 run 대상 dry-run
 python tools/run_pdbert.py \
@@ -238,6 +247,7 @@ python tools/compare-artifacts.py \
 - 기본 대상 경로:
   - VP-Bench root: `/home/sojeon/Desktop/VP-Bench`
   - container: `linevul`
+- VP-Bench가 다른 위치에 있으면 `--vpbench-root /path/to/VP-Bench` 로 지정할 수 있습니다.
 - 결과는 기본적으로 VP-Bench 쪽에만 저장됩니다.
   - dataset staging:
     `downloads/RealVul/datasets/juliet-playground/<run-id>/`
@@ -273,6 +283,7 @@ python tools/compare-artifacts.py \
 - 기본 대상 경로:
   - VP-Bench root: `/home/sojeon/Desktop/VP-Bench`
   - container: `pdbert`
+- VP-Bench가 다른 위치에 있으면 `--vpbench-root /path/to/VP-Bench` 로 지정할 수 있습니다.
 - 결과는 기본적으로 VP-Bench 쪽에 저장됩니다.
   - primary dataset staging:
     `downloads/PDBERT/data/datasets/extrinsic/vul_detect/juliet-playground/<run-id>/primary/vpbench/Real_Vul/`
