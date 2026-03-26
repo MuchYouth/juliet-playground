@@ -202,6 +202,7 @@ def test_run_linevul_dry_run_includes_optional_vuln_patch_eval(tmp_path, capsys)
     assert '[primary/test]' in captured.out
     assert '[vuln_patch/prepare]' in captured.out
     assert '[vuln_patch/test]' in captured.out
+    assert '[vuln_patch/raw_test]' in captured.out
     assert 'vuln_patch' in captured.out
 
 
@@ -336,6 +337,11 @@ def test_run_linevul_reuses_primary_best_model_for_vuln_patch_eval(tmp_path, mon
         elif log_path == vuln_host_output_dir / 'test.log':
             assert (vuln_host_output_dir / 'best_model' / 'config.json').exists()
             write_text(vuln_host_output_dir / 'test_pred_with_code.csv', 'label,pred\n1,0\n')
+        elif log_path == vuln_host_output_dir / 'raw_model_test.log':
+            write_text(
+                vuln_host_output_dir / 'raw_model_eval' / 'test_pred_with_code.csv',
+                'label,pred\n1,0\n',
+            )
         else:
             raise AssertionError(f'unexpected log path: {log_path}')
 
@@ -353,15 +359,17 @@ def test_run_linevul_reuses_primary_best_model_for_vuln_patch_eval(tmp_path, mon
     )
 
     assert result == 0
-    assert len(commands) == 5
+    assert len(commands) == 6
     assert [log_path for _, log_path in commands] == [
         host_output_dir / 'prepare.log',
         host_output_dir / 'train.log',
         host_output_dir / 'test.log',
         vuln_host_output_dir / 'prepare.log',
         vuln_host_output_dir / 'test.log',
+        vuln_host_output_dir / 'raw_model_test.log',
     ]
     assert sum('--train' in command for command, _ in commands) == 1
+    assert '--eval_model_name' in commands[-1][0]
     assert host_dataset_dir.joinpath('Real_Vul_data.csv').read_text(encoding='utf-8') == (
         source_csv.read_text(encoding='utf-8')
     )
@@ -373,6 +381,7 @@ def test_run_linevul_reuses_primary_best_model_for_vuln_patch_eval(tmp_path, mon
     assert host_output_dir.joinpath('train_loss_by_epoch.png').exists()
     assert vuln_host_output_dir.joinpath('best_model', 'config.json').exists()
     assert vuln_host_output_dir.joinpath('test_pred_with_code.csv').exists()
+    assert vuln_host_output_dir.joinpath('raw_model_eval', 'test_pred_with_code.csv').exists()
     assert not vuln_host_output_dir.joinpath('training_loss.log').exists()
     assert not vuln_host_output_dir.joinpath('train_loss_by_epoch.png').exists()
     assert not vuln_host_output_dir.joinpath('train.log').exists()

@@ -29,6 +29,12 @@ def _make_vpbench_root(root: Path) -> Path:
     return root
 
 
+def _make_raw_model_archive_dir(root: Path) -> Path:
+    write_text(root / 'config.json', '{}\n')
+    write_text(root / 'model.tar.gz', 'model\n')
+    return root
+
+
 def _write_stage07_csv(path: Path, *, include_test_rows: bool = True) -> None:
     fieldnames = [
         'file_name',
@@ -131,6 +137,7 @@ def test_run_pdbert_uses_latest_run_in_dry_run_mode(tmp_path, capsys):
     os.utime(older_csv.parent.parent, (1, 1))
     os.utime(newer_csv.parent.parent, (2, 2))
     vpbench_root = _make_vpbench_root(tmp_path / 'VP-Bench')
+    raw_model_dir = _make_raw_model_archive_dir(tmp_path / 'raw-model')
 
     result = run_module_main(
         module,
@@ -139,6 +146,8 @@ def test_run_pdbert_uses_latest_run_in_dry_run_mode(tmp_path, capsys):
             str(pipeline_root),
             '--vpbench-root',
             str(vpbench_root),
+            '--raw-model-dir',
+            str(raw_model_dir),
             '--dry-run',
         ],
     )
@@ -154,6 +163,8 @@ def test_run_pdbert_uses_latest_run_in_dry_run_mode(tmp_path, capsys):
     assert '[vuln_patch/prepare]' in captured.out
     assert '[vuln_patch/test]' in captured.out
     assert '[vuln_patch/analyze]' in captured.out
+    assert '[vuln_patch/raw_test]' in captured.out
+    assert '[vuln_patch/raw_analyze]' in captured.out
 
 
 def test_run_pdbert_stages_csv_configs_and_runs_primary_pipeline(tmp_path, monkeypatch):
@@ -170,6 +181,7 @@ def test_run_pdbert_stages_csv_configs_and_runs_primary_pipeline(tmp_path, monke
             pipeline_root=tmp_path / 'pipeline-runs',
             vpbench_root=vpbench_root,
             container_name='pdbert',
+            raw_model_dir=None,
             overwrite=False,
             dry_run=False,
         )
@@ -202,6 +214,7 @@ def test_run_pdbert_stages_csv_configs_and_runs_primary_pipeline(tmp_path, monke
         elif log_path == primary_paths.host_analyze_log:
             write_text(primary_paths.host_eval_result_csv, 'metric,value\nf1,1.0\n')
             write_text(primary_paths.host_analysis_json, '{}\n')
+            write_text(primary_paths.host_feature_npz, 'stub npz\n')
 
     monkeypatch.setattr(module, 'check_container_running', lambda _container_name: None)
     monkeypatch.setattr(module, 'run_logged_command', fake_run_logged_command)
