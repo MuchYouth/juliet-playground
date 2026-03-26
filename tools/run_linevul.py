@@ -15,7 +15,7 @@ from shared.artifact_layout import build_dataset_export_paths
 from shared.paths import RESULT_DIR
 
 JULIET_LINEVUL_NAMESPACE = 'juliet-playground'
-DEFAULT_VPBENCH_ROOT = Path('/home/sojeon/Desktop/VP-Bench')
+DEFAULT_VPBENCH_ROOT = Path('/home/mjbin/lab/VP-Bench')
 DEFAULT_CONTAINER_NAME = 'linevul'
 DEFAULT_TOKENIZER_NAME = 'microsoft/codebert-base'
 DEFAULT_MODEL_NAME = 'microsoft/codebert-base'
@@ -60,14 +60,18 @@ class LineVulPaths:
     host_prepare_log: Path
     host_train_log: Path
     host_test_log: Path
+    host_raw_test_log: Path
     host_train_dataset_pkl: Path
     host_val_dataset_pkl: Path
     host_test_dataset_pkl: Path
     host_best_model_dir: Path
     host_test_predictions_csv: Path
+    host_raw_test_output_dir: Path
+    host_raw_test_predictions_csv: Path
     host_line_vul_script: Path
     container_dataset_dir: Path
     container_output_dir: Path
+    container_raw_test_output_dir: Path
     container_dataset_csv: Path
 
 
@@ -200,16 +204,20 @@ def build_linevul_paths(
         host_prepare_log=host_output_dir / 'prepare.log',
         host_train_log=host_output_dir / 'train.log',
         host_test_log=host_output_dir / 'test.log',
+        host_raw_test_log=host_output_dir / 'raw_model_test.log',
         host_train_dataset_pkl=host_dataset_dir / 'train_dataset.pkl',
         host_val_dataset_pkl=host_dataset_dir / 'val_dataset.pkl',
         host_test_dataset_pkl=host_dataset_dir / 'test_dataset.pkl',
         host_best_model_dir=host_output_dir / 'best_model',
         host_test_predictions_csv=host_output_dir / 'test_pred_with_code.csv',
+        host_raw_test_output_dir=host_output_dir / 'raw_model_eval',
+        host_raw_test_predictions_csv=(host_output_dir / 'raw_model_eval' / 'test_pred_with_code.csv'),
         host_line_vul_script=(
             config.vpbench_root / 'baseline' / 'RealVul' / 'Experiments' / 'LineVul' / 'line_vul.py'
         ),
         container_dataset_dir=container_dataset_dir,
         container_output_dir=container_output_dir,
+        container_raw_test_output_dir=container_output_dir / 'raw_model_eval',
         container_dataset_csv=container_dataset_dir / 'Real_Vul_data.csv',
     )
 
@@ -290,14 +298,22 @@ def build_line_vul_command(
         phase_flags = ['--prepare_dataset']
         train_batch_size = config.eval_batch_size
         eval_batch_size = config.eval_batch_size
+        output_dir = paths.container_output_dir
     elif phase == 'train':
         phase_flags = ['--train']
         train_batch_size = config.train_batch_size
         eval_batch_size = config.train_batch_size
+        output_dir = paths.container_output_dir
     elif phase == 'test':
         phase_flags = ['--test_predict']
         train_batch_size = config.eval_batch_size
         eval_batch_size = config.eval_batch_size
+        output_dir = paths.container_output_dir
+    elif phase == 'raw_test':
+        phase_flags = ['--test_predict', '--eval_model_name', config.model_name]
+        train_batch_size = config.eval_batch_size
+        eval_batch_size = config.eval_batch_size
+        output_dir = paths.container_raw_test_output_dir
     else:
         raise ValueError(f'Unsupported LineVul phase: {phase}')
 
@@ -312,7 +328,7 @@ def build_line_vul_command(
         '--dataset_path',
         str(paths.container_dataset_dir),
         '--output_dir',
-        str(paths.container_output_dir),
+        str(output_dir),
         '--tokenizer_name',
         config.tokenizer_name,
         '--model_name',
@@ -336,7 +352,7 @@ def build_command_steps(
         if paths.target_name == PRIMARY_TARGET_NAME:
             phases = ('prepare', 'train', 'test')
         elif paths.target_name == VULN_PATCH_TARGET_NAME:
-            phases = ('prepare', 'test')
+            phases = ('prepare', 'test', 'raw_test')
         else:
             raise ValueError(f'Unsupported LineVul target: {paths.target_name}')
 
@@ -374,6 +390,8 @@ def print_completion_summary(paths_list: Sequence[LineVulPaths]) -> None:
         print(f'  - [{paths.target_name}] dataset_pickles: {paths.host_dataset_dir}')
         print(f'  - [{paths.target_name}] best_model: {paths.host_best_model_dir}')
         print(f'  - [{paths.target_name}] test_predictions: {paths.host_test_predictions_csv}')
+        if paths.target_name == VULN_PATCH_TARGET_NAME:
+            print(f'  - [{paths.target_name}] raw_model_test_predictions: {paths.host_raw_test_predictions_csv}')
         print(f'  - [{paths.target_name}] logs: {paths.host_output_dir}')
 
 
@@ -461,6 +479,18 @@ def run_linevul_from_pipeline(config: LineVulRunConfig) -> int:
             vuln_patch_paths.host_best_model_dir / 'config.json', 'best_model/config.json'
         )
         require_exists(vuln_patch_paths.host_test_predictions_csv, 'test_pred_with_code.csv')
+
+        vuln_patch_raw_test_step = next(
+            step
+            for step in commands
+            if step.paths.target_name == VULN_PATCH_TARGET_NAME and step.phase == 'raw_test'
+        )
+        print(f'Running LineVul raw-model test for {vuln_patch_raw_test_step.paths.display_name}...')
+        run_logged_command(vuln_patch_raw_test_step.command, vuln_patch_paths.host_raw_test_log)
+        require_exists(
+            vuln_patch_paths.host_raw_test_predictions_csv,
+            'raw-model test_pred_with_code.csv',
+        )
 
     print_completion_summary(paths_list)
     return 0
