@@ -183,10 +183,17 @@ def resolve_run_dir(config: PDBERTRunConfig) -> Path:
 validate_stage07_csv = _bench_runner.validate_stage07_csv
 _existing_output_targets = _bench_runner.existing_output_targets
 _remove_host_output_path = _bench_runner.remove_host_output_path
-stage_source_csv = _bench_runner.stage_source_csv
 check_container_running = _bench_runner.check_container_running
 run_logged_command = _bench_runner.run_logged_command
 require_exists = _bench_runner.require_exists
+
+
+def stage_source_csv(paths: _bench_runner.RunnerPathSpec) -> None:
+    _bench_runner.stage_source_csv(paths)
+    alias_csv = paths.host_dataset_dir / f'{paths.host_dataset_dir.name}_dataset.csv'
+    if alias_csv == paths.host_dataset_csv:
+        return
+    shutil.copy2(paths.host_dataset_csv, alias_csv)
 
 
 def _target_output_relative_parts(target_name: str) -> tuple[str, ...]:
@@ -224,9 +231,14 @@ def raw_model_setup_log_path(paths: PDBERTPaths) -> Path:
 
 
 def detect_raw_model_source_type(raw_model_dir: Path) -> str:
-    if all((raw_model_dir / artifact_name).exists() for artifact_name in REQUIRED_MODEL_ARTIFACT_NAMES):
+    if all(
+        (raw_model_dir / artifact_name).exists() for artifact_name in REQUIRED_MODEL_ARTIFACT_NAMES
+    ):
         return RAW_MODEL_SOURCE_ARCHIVE
-    if all((raw_model_dir / artifact_name).exists() for artifact_name in PRETRAINED_MODEL_ARTIFACT_NAMES):
+    if all(
+        (raw_model_dir / artifact_name).exists()
+        for artifact_name in PRETRAINED_MODEL_ARTIFACT_NAMES
+    ):
         return RAW_MODEL_SOURCE_PRETRAINED_BACKBONE
     raise ValueError(
         'Raw PDBERT model dir must be either an AllenNLP archive dir '
@@ -303,8 +315,8 @@ def build_pdbert_paths(
     container_runtime_dir = container_dataset_dir / '_run_pdbert'
     host_raw_model_dir = host_output_dir / RAW_MODEL_EVAL_DIRNAME
     container_raw_model_dir = container_output_dir / RAW_MODEL_EVAL_DIRNAME
-    host_feature_npz, host_feature_tsne_image, host_feature_tsne_cache_json = _feature_artifact_paths(
-        host_output_dir
+    host_feature_npz, host_feature_tsne_image, host_feature_tsne_cache_json = (
+        _feature_artifact_paths(host_output_dir)
     )
     (
         host_raw_feature_npz,
@@ -676,9 +688,24 @@ def build_analyze_setup_command(paths: PDBERTPaths, *, container_name: str) -> l
     return [
         'docker',
         'cp',
-        str(paths.host_analyze_script),
+        str(_prepare_analyze_script_for_container(paths)),
         f'{container_name}:{CONTAINER_ANALYZE_SCRIPT}',
     ]
+
+
+def _prepare_analyze_script_for_container(paths: PDBERTPaths) -> Path:
+    source_path = paths.host_analyze_script
+    patched_path = paths.host_prepare_log.parent / '_patched_analyze_prediction.py'
+    text = source_path.read_text(encoding='utf-8')
+    if 'from __future__ import annotations' not in text:
+        if text.startswith('#!'):
+            first_line, _, remainder = text.partition('\n')
+            text = first_line + '\nfrom __future__ import annotations\n' + remainder
+        else:
+            text = 'from __future__ import annotations\n' + text
+    patched_path.parent.mkdir(parents=True, exist_ok=True)
+    patched_path.write_text(text, encoding='utf-8')
+    return patched_path
 
 
 def copy_analyze_script_to_container(paths: PDBERTPaths, container_name: str) -> None:
@@ -810,8 +837,12 @@ def print_planned_commands(
         print(f'Target [{paths.target_name}] Container output dir: {paths.container_output_dir}')
         if paths.target_name == VULN_PATCH_TARGET_NAME and config.raw_model_dir is not None:
             print(f'Target [{paths.target_name}] Host raw model dir: {paths.host_raw_model_dir}')
-            print(f'Target [{paths.target_name}] Host raw feature export: {paths.host_raw_feature_npz}')
-            print(f'Target [{paths.target_name}] Container raw model dir: {paths.container_raw_model_dir}')
+            print(
+                f'Target [{paths.target_name}] Host raw feature export: {paths.host_raw_feature_npz}'
+            )
+            print(
+                f'Target [{paths.target_name}] Container raw model dir: {paths.container_raw_model_dir}'
+            )
             if raw_model_source_type == RAW_MODEL_SOURCE_PRETRAINED_BACKBONE:
                 print(
                     f'Target [{paths.target_name}] Host raw pretrained source dir: '
@@ -819,11 +850,13 @@ def print_planned_commands(
                 )
                 print(
                     '[raw-baseline/setup] '
-                    + ' '.join(build_raw_baseline_setup_command(paths, container_name=config.container_name))
+                    + ' '.join(
+                        build_raw_baseline_setup_command(
+                            paths, container_name=config.container_name
+                        )
+                    )
                 )
-                print(
-                    '[raw-baseline/build] ' + ' '.join(build_raw_baseline_command(config, paths))
-                )
+                print('[raw-baseline/build] ' + ' '.join(build_raw_baseline_command(config, paths)))
     for step in commands:
         print(f'[{step.label}] {" ".join(step.command)}')
 
@@ -1011,7 +1044,9 @@ def run_pdbert_from_pipeline(config: PDBERTRunConfig) -> int:
             if step.paths.target_name == VULN_PATCH_TARGET_NAME and step.phase == 'raw_analyze'
         )
         copy_analyze_script_to_container(vuln_patch_paths, config.container_name)
-        print(f'Running PDBERT raw-model analyze for {vuln_patch_raw_analyze_step.paths.display_name}...')
+        print(
+            f'Running PDBERT raw-model analyze for {vuln_patch_raw_analyze_step.paths.display_name}...'
+        )
         run_logged_command(
             vuln_patch_raw_analyze_step.command,
             vuln_patch_paths.host_raw_analyze_log,

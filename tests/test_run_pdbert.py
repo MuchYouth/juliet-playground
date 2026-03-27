@@ -262,3 +262,34 @@ def test_run_pdbert_stages_csv_configs_and_runs_primary_pipeline(tmp_path, monke
     training_loss_plot = module.training_loss_plot_path(primary_paths)
     assert training_loss_plot.exists()
     assert training_loss_plot.read_bytes().startswith(b'\x89PNG\r\n\x1a\n')
+
+
+def test_run_pdbert_prepares_python38_compatible_analyze_script(tmp_path):
+    module = load_module_from_path(
+        'test_run_pdbert_analyze_patch', REPO_ROOT / 'tools/run_pdbert.py'
+    )
+
+    run_dir = tmp_path / 'pipeline-runs' / 'run-demo'
+    source_csv = run_dir / '07_dataset_export' / 'Real_Vul_data.csv'
+    _write_stage07_csv(source_csv)
+    vpbench_root = _make_vpbench_root(tmp_path / 'VP-Bench')
+
+    config = module.normalize_config(
+        module.PDBERTRunConfig(
+            run_dir=run_dir,
+            pipeline_root=tmp_path / 'pipeline-runs',
+            vpbench_root=vpbench_root,
+            container_name='pdbert',
+            raw_model_dir=None,
+            overwrite=False,
+            dry_run=False,
+        )
+    )
+    primary_paths = module.build_pdbert_paths(
+        config, run_dir, target_name=module.PRIMARY_TARGET_NAME
+    )
+
+    patched_script = module._prepare_analyze_script_for_container(primary_paths)
+
+    assert patched_script.exists()
+    assert 'from __future__ import annotations' in patched_script.read_text(encoding='utf-8')
