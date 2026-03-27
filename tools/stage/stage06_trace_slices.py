@@ -30,15 +30,42 @@ def build_slice(std_bug_trace: list[dict[str, Any]]) -> tuple[str | None, str | 
     return _slicing.build_slice(std_bug_trace)
 
 
+def _resolve_trace_paths(
+    std_bug_trace: list[dict[str, Any]],
+    *,
+    source_root: Path | None,
+) -> list[dict[str, Any]]:
+    if source_root is None:
+        return std_bug_trace
+
+    resolved_trace: list[dict[str, Any]] = []
+    for node in std_bug_trace:
+        filename = str(node.get('filename') or '').strip()
+        if not filename:
+            resolved_trace.append(dict(node))
+            continue
+        candidate = Path(filename)
+        if candidate.is_absolute():
+            resolved_trace.append(dict(node))
+            continue
+        updated = dict(node)
+        updated['filename'] = str((source_root / candidate).resolve())
+        resolved_trace.append(updated)
+    return resolved_trace
+
+
 def generate_trace_slices(
     *,
     traces_jsonl: Path,
     output_dir: Path,
     overwrite: bool = False,
+    source_root: Path | None = None,
 ) -> dict[str, Any]:
     import json
 
     validate_args(traces_jsonl)
+    if source_root is not None and not source_root.exists():
+        raise FileNotFoundError(f'Source root not found: {source_root}')
     prepare_output_dir(output_dir, overwrite)
 
     paths = build_slice_stage_paths(output_dir)
@@ -70,6 +97,7 @@ def generate_trace_slices(
         if not std_bug_trace:
             counters['skipped_empty_bug_trace'] += 1
             continue
+        std_bug_trace = _resolve_trace_paths(std_bug_trace, source_root=source_root)
 
         slice_content, reason = build_slice(std_bug_trace)
         if slice_content is None:
