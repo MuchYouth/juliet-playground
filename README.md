@@ -106,6 +106,55 @@ source .venv/bin/activate && python tools/run_pipeline.py full --all
 기본 run-id 규칙은 `run-YYYY.MM.DD-HH:MM:SS`이며,
 실제 경로는 `artifacts/pipeline-runs/run-.../` 입니다.
 
+### 3) 외부 프로젝트 trace fast path 실행
+
+Juliet 전체 파이프라인 대신 외부 프로젝트에 대해
+`Infer -> manual-line trace filter -> trace slices -> test-only dataset export`
+만 빠르게 실행하려면 아래 스크립트를 사용합니다.
+
+```bash
+source .venv/bin/activate
+
+python tools/run_external_trace_pipeline.py \
+  --source-root /path/to/project/raw_code \
+  --build-targets /path/to/build_targets.csv \
+  --manual-line-truth /path/to/manual_line_truth.csv \
+  --run-id myproj-test \
+  --project-name myproj
+```
+
+- 필수 인자
+  - `--source-root`: 외부 프로젝트 소스 루트
+  - `--build-targets`: testcase별 Infer 빌드 명령 CSV
+  - `--manual-line-truth`: 수동 취약 라인 truth CSV
+- 선택 인자
+  - `--pulse-taint-config`: 기본값 `config/pulse-taint-config.json`
+  - `--output-root`: 기본값 `artifacts/external-runs`
+  - `--run-id`: 기본값 `run-YYYY.MM.DD-HH:MM:SS`
+  - `--project-name`: 기본적으로 `source-root` 이름을 사용합니다.
+    `source-root` 이름이 `raw_code` 이면 부모 디렉터리 이름을 사용합니다.
+
+`build_targets.csv` 형식:
+
+```csv
+testcase_key,workdir,build_command
+case1,/abs/path/to/project,"make clean && make -j1"
+```
+
+`manual_line_truth.csv` 형식:
+
+```csv
+testcase_key,file_path,line_number,label,note
+case1,/abs/path/to/project/src/foo.c,"1187,609,486",1,confirmed vulnerable line
+```
+
+- `line_number` 는 쉼표/공백 구분 다 허용합니다.
+- `label` 은 `1`, `true`, `yes`, `vuln`, `vulnerable` 등을 취약으로 인식합니다.
+- 성공 시 대표 출력은
+  `artifacts/external-runs/<run-id>/07_dataset_export/Real_Vul_data.csv`,
+  `artifacts/external-runs/<run-id>/07_dataset_export/trace_row_manifest.jsonl`
+  입니다.
+
 ## 파이프라인 개요
 
 `tools/run_pipeline.py full`은 아래 순서로 실행됩니다.
