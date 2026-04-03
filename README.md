@@ -22,6 +22,11 @@ paired trace → slice → dataset export까지 이어지는 실험 저장소입
   [`experiments/epic001c_testcase_flow_partition/README.md`](experiments/epic001c_testcase_flow_partition/README.md)
 - Step 04 실험 메모 (`trace flow filter`):
   [`experiments/epic001d_trace_flow_filter/README.md`](experiments/epic001d_trace_flow_filter/README.md)
+- 외부 CVE pulse-taint 실험 메모:
+  [`CVE-2015-8617 php-src`](experiments/cve_2015_8617_php_src_pulse_taint/README.md),
+  [`CVE-2017-12588 rsyslog`](experiments/cve_2017_12588_rsyslog_pulse_taint/README.md),
+  [`CVE-2017-15924 shadowsocks-libev`](experiments/cve_2017_15924_shadowsocks_pulse_taint/README.md),
+  [`CVE-2019-13638 GNU patch`](experiments/cve_2019_13638_patch_pulse_taint/README.md)
 
 현재 구현 기준으로는 Stage 03 / 05 / 06 / 07 / 07b 동작을 `docs/stage-contracts.md`와
 `tools/stage/` 코드에서 확인하는 것이 가장 정확합니다.
@@ -133,6 +138,8 @@ python tools/run_external_trace_pipeline.py \
   - `--run-id`: 기본값 `run-YYYY.MM.DD-HH:MM:SS`
   - `--project-name`: 기본적으로 `source-root` 이름을 사용합니다.
     `source-root` 이름이 `raw_code` 이면 부모 디렉터리 이름을 사용합니다.
+  - `--overwrite`: 같은 `run-id` 출력 디렉터리가 이미 있으면 해당 run 디렉터리 전체를
+    삭제하고 처음부터 다시 실행합니다.
 
 `build_targets.csv` 형식:
 
