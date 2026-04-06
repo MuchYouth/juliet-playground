@@ -141,6 +141,15 @@ python tools/run_external_trace_pipeline.py \
   - `--overwrite`: 같은 `run-id` 출력 디렉터리가 이미 있으면 해당 run 디렉터리 전체를
     삭제하고 처음부터 다시 실행합니다.
 
+- 출력 경로 규칙
+  - 도구 계약상 external fast path run 디렉터리는 기본적으로
+    `artifacts/external-runs/<run-id>/` 입니다.
+  - 다만 실제 운영에서는 `--output-root artifacts/external-runs/<CVE-or-project>` 처럼
+    상위 디렉터리를 한 번 더 지정해서
+    `artifacts/external-runs/<CVE-or-project>/<run-id>/` 형태로 묶어 두는 경우가 많습니다.
+  - `artifacts/external-runs/archive/` 는 과거 실험 run을 옮겨 둔 관례용 디렉터리이며,
+    CLI가 강제하는 레이아웃은 아닙니다.
+
 `build_targets.csv` 형식:
 
 ```csv
@@ -161,6 +170,9 @@ case1,/abs/path/to/project/src/foo.c,"1187,609,486",1,confirmed vulnerable line
   `artifacts/external-runs/<run-id>/07_dataset_export/Real_Vul_data.csv`,
   `artifacts/external-runs/<run-id>/07_dataset_export/trace_row_manifest.jsonl`
   입니다.
+- 외부 run에서 후속 데이터 읽기 기준 파일은 보통 아래 둘입니다.
+  - `07_dataset_export/Real_Vul_data.csv`: test-only dataset CSV
+  - `07_dataset_export/trace_row_manifest.jsonl`: dataset row ↔ trace/source line 매핑
 
 ## 파이프라인 개요
 
@@ -212,6 +224,20 @@ artifacts/
 │   └── infer-YYYY.MM.DD-HH:MM:SS/
 │       ├── CWE.../infer-out/
 │       └── analysis/{result.csv,no_issue_files.txt}
+├── external-runs/
+│   ├── <run-id>/                         # CLI 기본 계약
+│   ├── <CVE-or-project>/<run-id>/        # 현재 자주 쓰는 운영 관례
+│   │   ├── 03_infer-results/
+│   │   ├── 03_signatures/
+│   │   ├── 03_infer_summary.json
+│   │   ├── 05b_manual_line_filter/
+│   │   ├── 06_trace_slices/
+│   │   └── 07_dataset_export/
+│   │       ├── Real_Vul_data.csv
+│   │       ├── normalized_slices/
+│   │       ├── summary.json
+│   │       └── trace_row_manifest.jsonl
+│   └── archive/                          # 운영상 보관용 관례
 ├── signatures/
 │   └── infer-YYYY.MM.DD-HH:MM:SS/
 │       └── signature-YYYY.MM.DD-HH:MM:SS/
