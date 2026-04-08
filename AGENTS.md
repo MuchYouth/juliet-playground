@@ -4,6 +4,7 @@ This repository runs Infer on the Juliet C/C++ test suite and maintains the pipe
 
 ## Start Here
 - Read `README.md` for local setup and common commands.
+- Treat the `README.md` Workspace Map as the canonical description of the repository layout.
 - Use `docs/pipeline-runbook.md` for pipeline behavior, `docs/artifacts.md` for output layout, `docs/rerun.md` for rerun workflows, and `docs/stage-contracts.md` for the current code-based stage contracts.
 - For stage-specific logic, use `experiments/*/README.md` mainly for stages 01/02a/02b/04; for stages 03/05/06/07/07b, prefer `docs/stage-contracts.md` and the matching `tools/stage/*.py`.
 
@@ -12,8 +13,11 @@ This repository runs Infer on the Juliet C/C++ test suite and maintains the pipe
 - `tools/stage/`: importable stage implementations for pipeline steps and rerun/export workflows.
 - `tools/shared/`: helper modules shared across stages and CLI entrypoints. Keep CLI wrappers thin and put reusable helper behavior here.
 - `tests/`: unit and regression tests. `tests/golden/` contains stage-level golden fixtures and fixture update tooling.
-- `experiments/`: stage-specific scripts, inputs, and notes for the EPIC001 pipeline.
-- `config/`: committed configuration, including `pulse-taint-config.json`.
+- `docs/`: operator-facing docs and current contracts. Prefer these over old experiment notes when both exist.
+- `juliet-test-suite-v1.3/`: Juliet input corpus. Actual source analysis typically starts under `juliet-test-suite-v1.3/C/`.
+- `external/`: external-project input workspace. Common pattern: `external/<project>/inputs/{raw_code,build_targets.csv,manual_line_truth.csv}`.
+- `experiments/`: experiment notes, helper scripts, and analysis outputs. Includes EPIC001-derived dirs plus `epic002/`, `epic003/`, selected `CVE-*` dirs, and `!never_read!archive/` for historical notes.
+- `config/`: committed configuration. Use `config/pulse-taint-config.json` for the common default, `config/CVE-*/` for project/experiment-specific variants, and `config/legacy/` for older archived configs.
 - `artifacts/`: generated outputs only. Juliet sources live under `juliet-test-suite-v1.3/C/`.
   - `artifacts/pipeline-runs/`: Juliet pipeline run outputs.
   - `artifacts/external-runs/`: external-project fast-path outputs from `tools/run_external_trace_pipeline.py`.
@@ -22,6 +26,9 @@ This repository runs Infer on the Juliet C/C++ test suite and maintains the pipe
     The CLI contract is `<output-root>/<run-id>/`, but in practice this repo often groups runs as
     `artifacts/external-runs/<CVE-or-project>/<run-id>/`; `artifacts/external-runs/archive/` is a
     repository convention for historical runs.
+  - `artifacts/external-build-audits/`: generated build-audit outputs for external projects such as the htcondor minimal-build workflow.
+
+Use `AGENTS.md` as a concise navigation aid. When `README.md` and `AGENTS.md` overlap, follow `README.md` for the workspace map and keep `AGENTS.md` synchronized at the summary level.
 
 ## Tool Layout Rules
 - Put **CLI entrypoints / wrappers / standalone utilities** in `tools/`.

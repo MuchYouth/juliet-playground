@@ -23,13 +23,61 @@ paired trace → slice → dataset export까지 이어지는 실험 저장소입
 - Step 04 실험 메모 (`trace flow filter`):
   [`experiments/epic001d_trace_flow_filter/README.md`](experiments/epic001d_trace_flow_filter/README.md)
 - 외부 CVE pulse-taint 실험 메모:
-  [`CVE-2015-8617 php-src`](experiments/cve_2015_8617_php_src_pulse_taint/README.md),
-  [`CVE-2017-12588 rsyslog`](experiments/cve_2017_12588_rsyslog_pulse_taint/README.md),
-  [`CVE-2017-15924 shadowsocks-libev`](experiments/cve_2017_15924_shadowsocks_pulse_taint/README.md),
-  [`CVE-2019-13638 GNU patch`](experiments/cve_2019_13638_patch_pulse_taint/README.md)
+  [`CVE-2017-15924 shadowsocks-libev`](experiments/cve_2017_15924_shadowsocks_pulse_taint/README.md)
+- 과거 외부 CVE 메모는 현재
+  `experiments/!never_read!archive/` 아래에 보관되어 있습니다.
 
 현재 구현 기준으로는 Stage 03 / 05 / 06 / 07 / 07b 동작을 `docs/stage-contracts.md`와
 `tools/stage/` 코드에서 확인하는 것이 가장 정확합니다.
+
+## Workspace Map
+
+이 저장소의 워크스페이스는 아래처럼 보는 것을 기본으로 합니다.
+
+- `tools/`
+  - 공식 CLI entrypoint, 상위 orchestration, 운영용 보조 스크립트를 둡니다.
+  - 핵심 구현은 `tools/stage/`, 공통 helper는 `tools/shared/`에 둡니다.
+  - 대표 예시:
+    `run_pipeline.py`, `run_external_trace_pipeline.py`, `retrace_strict_trace.py`,
+    `run_linevul.py`, `run_pdbert.py`, `run_pdbert_eval_only.py`,
+    `audit_htcondor_min_build.py`, `compare-artifacts.py`
+- `tests/`
+  - 단위 테스트와 회귀 테스트를 둡니다.
+  - `tests/golden/`은 stage-level golden fixture와 fixture 검증 도구를 포함합니다.
+- `docs/`
+  - 운영 문서와 현재 계약 문서를 둡니다.
+  - runbook / artifact layout / rerun workflow / stage contract의 정본은 여기를 우선 봅니다.
+- `juliet-test-suite-v1.3/`
+  - Juliet 입력 데이터가 들어 있습니다.
+  - 일반적으로 실제 분석 대상 소스는 `juliet-test-suite-v1.3/C/` 아래를 사용합니다.
+- `external/`
+  - 외부 프로젝트 fast path 입력 워크스페이스입니다.
+  - 기본 패턴은 `external/<project>/inputs/` 아래에
+    `raw_code/`, `build_targets.csv`, `manual_line_truth.csv`를 두는 형태입니다.
+- `config/`
+  - 커밋된 설정 파일을 둡니다.
+  - 공통 기본값은 `config/pulse-taint-config.json`,
+    프로젝트별/실험별 설정은 `config/CVE-*/`,
+    이전 실험 보관 설정은 `config/legacy/`에 둡니다.
+- `experiments/`
+  - 실험 메모, 보조 스크립트, 분석 출력, 이관 전 탐색 코드를 둡니다.
+  - 현재는 `epic001*`, `epic002`, `epic003`, 일부 `CVE-*` 디렉터리,
+    그리고 과거 기록 보관용 `!never_read!archive/`가 함께 존재합니다.
+  - 구현이 정착되면 운영 코드는 `tools/stage/` 또는 `tools/shared/`로 옮기고,
+    `experiments/`에는 문서/보조 분석만 남기는 것을 기본으로 봅니다.
+- `artifacts/`
+  - 생성 산출물 전용 디렉터리입니다.
+  - 주요 하위 구조:
+    - `artifacts/pipeline-runs/`: Juliet 통합 파이프라인 run 출력
+    - `artifacts/external-runs/`: 외부 프로젝트 fast path run 출력
+    - `artifacts/external-build-audits/`: 외부 프로젝트 빌드 감사/최소 재현 산출물
+    - `artifacts/infer-results/`, `artifacts/signatures/`: 단일 Infer/Signature 실행 산출물
+
+아래 항목은 로컬 개발 환경에 따라 생길 수 있지만, 저장소 계약의 일부로 보지 않습니다.
+
+- `.venv/`, `.pytest_cache/`, `.ruff_cache/`, 각종 `__pycache__/`
+- 루트 또는 작업 중간에 생기는 `*.o` 같은 임시 산출물
+- 개별 실험 중간 결과물 중 문서화된 artifact contract 밖의 캐시/로그
 
 ## 코드 구조 원칙
 
@@ -53,6 +101,9 @@ paired trace → slice → dataset export까지 이어지는 실험 저장소입
 - 전체 파이프라인 orchestration 또는 사람이 직접 실행하는 상위 명령이면 `tools/`
 - 한 단계의 계약/처리를 직접 구현하면 `tools/stage/`
 - 둘 이상이 재사용하면 `tools/shared/`
+
+폴더 목적이나 저장소 레이아웃이 바뀌면, 이 섹션의 `Workspace Map`과 관련 설명도 함께
+갱신하는 것을 기본 규칙으로 합니다.
 
 ## Quick Start
 
