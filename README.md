@@ -38,7 +38,8 @@ paired trace → slice → dataset export까지 이어지는 실험 저장소입
   - 공식 CLI entrypoint, 상위 orchestration, 운영용 보조 스크립트를 둡니다.
   - 핵심 구현은 `tools/stage/`, 공통 helper는 `tools/shared/`에 둡니다.
   - 대표 예시:
-    `run_pipeline.py`, `run_external_trace_pipeline.py`, `retrace_strict_trace.py`,
+    `run_pipeline.py`, `run_external_trace_pipeline.py`, `run_case.py`,
+    `retrace_strict_trace.py`,
     `run_linevul.py`, `run_pdbert.py`, `run_pdbert_eval_only.py`,
     `audit_htcondor_min_build.py`, `compare-artifacts.py`
 - `tests/`
@@ -54,6 +55,14 @@ paired trace → slice → dataset export까지 이어지는 실험 저장소입
   - 외부 프로젝트 fast path 입력 워크스페이스입니다.
   - 기본 패턴은 `external/<project>/inputs/` 아래에
     `raw_code/`, `build_targets.csv`, `manual_line_truth.csv`를 두는 형태입니다.
+- `cases/`
+  - 외부 취약점 trace 협업용 case 워크스페이스입니다.
+  - 기본 패턴은 `cases/<project>__<CVE>/<track>/` 아래에
+    `repo/`, `WORKLOG.md`, `trace_output/`, `runs/base-run/`, `runs/run-###/`를 두는 형태입니다.
+  - `track`은 현재 `vulnerable`, `patched`를 사용합니다.
+  - `runs/base-run/`은 공통 CSV 기본값을 두고,
+    `runs/run-###/`는 run별 `pulse-taint-config.json`, `outputs` symlink, 필요 시 CSV override를 둡니다.
+  - `trace_output/` 아래의 최종 `Real_Vul_data.csv`와 selected run 구성은 현재 **수작업 관리**를 기본으로 봅니다.
 - `config/`
   - 커밋된 설정 파일을 둡니다.
   - 공통 기본값은 `config/pulse-taint-config.json`,
@@ -179,6 +188,32 @@ python tools/run_external_trace_pipeline.py \
   --project-name myproj
 ```
 
+case 레이아웃을 쓰는 경우에는 아래 wrapper를 사용할 수 있습니다.
+
+```bash
+source .venv/bin/activate
+
+python tools/run_case.py \
+  --case cases/shadowsocks-libev__CVE-2017-15924 \
+  --track vulnerable \
+  --run run-001
+```
+
+- `tools/run_case.py`는
+  `cases/<project>__<CVE>/<track>/runs/run-###/build_targets.csv`,
+  `manual_line_truth.csv`, `pulse-taint-config.json`을 읽어
+  기존 `tools/run_external_trace_pipeline.py`를 호출합니다.
+- 성공 시 run 폴더의 `outputs` symlink를
+  `artifacts/external-runs/<project>__<CVE>/<track>/<run-id>/`로 맞춥니다.
+- `trace_output/Real_Vul_data.csv`와 `trace_output/selected_runs/`는 자동 생성하지 않습니다.
+  현재는 사람이 최종 trace를 수작업으로 정리하는 것을 기본 운영으로 둡니다.
+- case-managed final trace 운영 규칙:
+  - `trace_output/Real_Vul_data.csv`는 단일 run export의 복사본일 수도 있고, 여러 evidence run을 손으로 stitch한 최종 CSV일 수도 있습니다.
+  - 최종 CSV가 여러 run을 합친 결과라면 `trace_output/selected_runs/`에는 실제로 사용한 `runs/run-###/` symlink를 모두 남깁니다.
+  - 수작업 stitched row가 단일 source signature로 대표되지 않으면 `source_signature_path`는 억지로 대표 경로를 넣지 말고 빈칸으로 둡니다.
+  - `project` 값은 `inputs` 같은 임시 경로명이 아니라 실제 외부 프로젝트 이름으로 맞춥니다.
+  - stitch 근거와 채택 이유는 각 track의 `WORKLOG.md`에 남깁니다.
+
 - 필수 인자
   - `--source-root`: 외부 프로젝트 소스 루트
   - `--build-targets`: testcase별 Infer 빌드 명령 CSV
@@ -217,6 +252,10 @@ case1,/abs/path/to/project/src/foo.c,"1187,609,486",1,confirmed vulnerable line
 
 - `line_number` 는 쉼표/공백 구분 다 허용합니다.
 - `label` 은 `1`, `true`, `yes`, `vuln`, `vulnerable` 등을 취약으로 인식합니다.
+- `build_targets.csv.workdir`는 절대경로 외에 **CSV 파일 기준 상대경로**도 허용합니다.
+  예: `cases/<project>__<CVE>/<track>/runs/base-run/build_targets.csv` 안에서 `../../repo`
+- `manual_line_truth.csv.file_path`는 절대경로 외에 **source-root 기준 상대경로**도 허용합니다.
+  예: `src/manager.c`
 - 성공 시 대표 출력은
   `artifacts/external-runs/<run-id>/07_dataset_export/Real_Vul_data.csv`,
   `artifacts/external-runs/<run-id>/07_dataset_export/trace_row_manifest.jsonl`

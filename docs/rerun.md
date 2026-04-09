@@ -42,6 +42,14 @@ python tools/compare-artifacts.py \
 
 ## 운영 메모
 
+### Case-managed final trace 운영 규칙
+
+- `cases/<project>__<CVE>/<track>/trace_output/Real_Vul_data.csv`는 사람이 관리하는 최종 산출물입니다.
+- 이 CSV는 단일 rerun export일 수도 있고, 여러 evidence run을 손으로 stitch한 결과일 수도 있습니다.
+- 여러 run을 합쳐 최종 row를 만들었다면 `trace_output/selected_runs/`에 실제 사용한 `runs/run-###/` symlink를 모두 남깁니다.
+- 수작업 stitched row가 단일 source signature로 대표되지 않으면 `source_signature_path`는 빈칸으로 두고, 근거는 `selected_runs/`와 track `WORKLOG.md`로 관리합니다.
+- `project` 값은 실제 외부 프로젝트 이름으로 통일하고, `inputs` 같은 경로 유래 placeholder는 최종 CSV에 남기지 않는 것을 기본으로 합니다.
+
 ### Step 07 / 07b의 tokenizer 의존성
 
 - dataset export 단계는 내부적으로 `microsoft/codebert-base` tokenizer를 로드합니다.
