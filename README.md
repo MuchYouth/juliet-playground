@@ -22,71 +22,9 @@ paired trace → slice → dataset export까지 이어지는 실험 저장소입
   [`experiments/epic001c_testcase_flow_partition/README.md`](experiments/epic001c_testcase_flow_partition/README.md)
 - Step 04 실험 메모 (`trace flow filter`):
   [`experiments/epic001d_trace_flow_filter/README.md`](experiments/epic001d_trace_flow_filter/README.md)
-- 외부 CVE pulse-taint 실험 메모:
-  [`CVE-2017-15924 shadowsocks-libev`](experiments/cve_2017_15924_shadowsocks_pulse_taint/README.md)
-- 과거 외부 CVE 메모는 현재
-  `experiments/!never_read!archive/` 아래에 보관되어 있습니다.
 
 현재 구현 기준으로는 Stage 03 / 05 / 06 / 07 / 07b 동작을 `docs/stage-contracts.md`와
 `tools/stage/` 코드에서 확인하는 것이 가장 정확합니다.
-
-## Workspace Map
-
-이 저장소의 워크스페이스는 아래처럼 보는 것을 기본으로 합니다.
-
-- `tools/`
-  - 공식 CLI entrypoint, 상위 orchestration, 운영용 보조 스크립트를 둡니다.
-  - 핵심 구현은 `tools/stage/`, 공통 helper는 `tools/shared/`에 둡니다.
-  - 대표 예시:
-    `run_pipeline.py`, `run_external_trace_pipeline.py`, `run_case.py`,
-    `retrace_strict_trace.py`,
-    `run_linevul.py`, `run_pdbert.py`, `run_pdbert_eval_only.py`,
-    `audit_htcondor_min_build.py`, `compare-artifacts.py`
-- `tests/`
-  - 단위 테스트와 회귀 테스트를 둡니다.
-  - `tests/golden/`은 stage-level golden fixture와 fixture 검증 도구를 포함합니다.
-- `docs/`
-  - 운영 문서와 현재 계약 문서를 둡니다.
-  - runbook / artifact layout / rerun workflow / stage contract의 정본은 여기를 우선 봅니다.
-- `juliet-test-suite-v1.3/`
-  - Juliet 입력 데이터가 들어 있습니다.
-  - 일반적으로 실제 분석 대상 소스는 `juliet-test-suite-v1.3/C/` 아래를 사용합니다.
-- `external/`
-  - 외부 프로젝트 fast path 입력 워크스페이스입니다.
-  - 기본 패턴은 `external/<project>/inputs/` 아래에
-    `raw_code/`, `build_targets.csv`, `manual_line_truth.csv`를 두는 형태입니다.
-- `cases/`
-  - 외부 취약점 trace 협업용 case 워크스페이스입니다.
-  - 기본 패턴은 `cases/<project>__<CVE>/<track>/` 아래에
-    `repo/`, `WORKLOG.md`, `trace_output/`, `runs/base-run/`, `runs/run-###/`를 두는 형태입니다.
-  - `track`은 현재 `vulnerable`, `patched`를 사용합니다.
-  - `runs/base-run/`은 공통 CSV 기본값을 두고,
-    `runs/run-###/`는 run별 `pulse-taint-config.json`, `outputs` symlink, 필요 시 CSV override를 둡니다.
-  - `trace_output/` 아래의 최종 `Real_Vul_data.csv`와 selected run 구성은 현재 **수작업 관리**를 기본으로 봅니다.
-- `config/`
-  - 커밋된 설정 파일을 둡니다.
-  - 공통 기본값은 `config/pulse-taint-config.json`,
-    프로젝트별/실험별 설정은 `config/CVE-*/`,
-    이전 실험 보관 설정은 `config/legacy/`에 둡니다.
-- `experiments/`
-  - 실험 메모, 보조 스크립트, 분석 출력, 이관 전 탐색 코드를 둡니다.
-  - 현재는 `epic001*`, `epic002`, `epic003`, 일부 `CVE-*` 디렉터리,
-    그리고 과거 기록 보관용 `!never_read!archive/`가 함께 존재합니다.
-  - 구현이 정착되면 운영 코드는 `tools/stage/` 또는 `tools/shared/`로 옮기고,
-    `experiments/`에는 문서/보조 분석만 남기는 것을 기본으로 봅니다.
-- `artifacts/`
-  - 생성 산출물 전용 디렉터리입니다.
-  - 주요 하위 구조:
-    - `artifacts/pipeline-runs/`: Juliet 통합 파이프라인 run 출력
-    - `artifacts/external-runs/`: 외부 프로젝트 fast path run 출력
-    - `artifacts/external-build-audits/`: 외부 프로젝트 빌드 감사/최소 재현 산출물
-    - `artifacts/infer-results/`, `artifacts/signatures/`: 단일 Infer/Signature 실행 산출물
-
-아래 항목은 로컬 개발 환경에 따라 생길 수 있지만, 저장소 계약의 일부로 보지 않습니다.
-
-- `.venv/`, `.pytest_cache/`, `.ruff_cache/`, 각종 `__pycache__/`
-- 루트 또는 작업 중간에 생기는 `*.o` 같은 임시 산출물
-- 개별 실험 중간 결과물 중 문서화된 artifact contract 밖의 캐시/로그
 
 ## 코드 구조 원칙
 
@@ -110,9 +48,6 @@ paired trace → slice → dataset export까지 이어지는 실험 저장소입
 - 전체 파이프라인 orchestration 또는 사람이 직접 실행하는 상위 명령이면 `tools/`
 - 한 단계의 계약/처리를 직접 구현하면 `tools/stage/`
 - 둘 이상이 재사용하면 `tools/shared/`
-
-폴더 목적이나 저장소 레이아웃이 바뀌면, 이 섹션의 `Workspace Map`과 관련 설명도 함께
-갱신하는 것을 기본 규칙으로 합니다.
 
 ## Quick Start
 
@@ -188,32 +123,6 @@ python tools/run_external_trace_pipeline.py \
   --project-name myproj
 ```
 
-case 레이아웃을 쓰는 경우에는 아래 wrapper를 사용할 수 있습니다.
-
-```bash
-source .venv/bin/activate
-
-python tools/run_case.py \
-  --case cases/shadowsocks-libev__CVE-2017-15924 \
-  --track vulnerable \
-  --run run-001
-```
-
-- `tools/run_case.py`는
-  `cases/<project>__<CVE>/<track>/runs/run-###/build_targets.csv`,
-  `manual_line_truth.csv`, `pulse-taint-config.json`을 읽어
-  기존 `tools/run_external_trace_pipeline.py`를 호출합니다.
-- 성공 시 run 폴더의 `outputs` symlink를
-  `artifacts/external-runs/<project>__<CVE>/<track>/<run-id>/`로 맞춥니다.
-- `trace_output/Real_Vul_data.csv`와 `trace_output/selected_runs/`는 자동 생성하지 않습니다.
-  현재는 사람이 최종 trace를 수작업으로 정리하는 것을 기본 운영으로 둡니다.
-- case-managed final trace 운영 규칙:
-  - `trace_output/Real_Vul_data.csv`는 단일 run export의 복사본일 수도 있고, 여러 evidence run을 손으로 stitch한 최종 CSV일 수도 있습니다.
-  - 최종 CSV가 여러 run을 합친 결과라면 `trace_output/selected_runs/`에는 실제로 사용한 `runs/run-###/` symlink를 모두 남깁니다.
-  - 수작업 stitched row가 단일 source signature로 대표되지 않으면 `source_signature_path`는 억지로 대표 경로를 넣지 말고 빈칸으로 둡니다.
-  - `project` 값은 `inputs` 같은 임시 경로명이 아니라 실제 외부 프로젝트 이름으로 맞춥니다.
-  - stitch 근거와 채택 이유는 각 track의 `WORKLOG.md`에 남깁니다.
-
 - 필수 인자
   - `--source-root`: 외부 프로젝트 소스 루트
   - `--build-targets`: testcase별 Infer 빌드 명령 CSV
@@ -224,17 +133,6 @@ python tools/run_case.py \
   - `--run-id`: 기본값 `run-YYYY.MM.DD-HH:MM:SS`
   - `--project-name`: 기본적으로 `source-root` 이름을 사용합니다.
     `source-root` 이름이 `raw_code` 이면 부모 디렉터리 이름을 사용합니다.
-  - `--overwrite`: 같은 `run-id` 출력 디렉터리가 이미 있으면 해당 run 디렉터리 전체를
-    삭제하고 처음부터 다시 실행합니다.
-
-- 출력 경로 규칙
-  - 도구 계약상 external fast path run 디렉터리는 기본적으로
-    `artifacts/external-runs/<run-id>/` 입니다.
-  - 다만 실제 운영에서는 `--output-root artifacts/external-runs/<CVE-or-project>` 처럼
-    상위 디렉터리를 한 번 더 지정해서
-    `artifacts/external-runs/<CVE-or-project>/<run-id>/` 형태로 묶어 두는 경우가 많습니다.
-  - `artifacts/external-runs/archive/` 는 과거 실험 run을 옮겨 둔 관례용 디렉터리이며,
-    CLI가 강제하는 레이아웃은 아닙니다.
 
 `build_targets.csv` 형식:
 
@@ -252,17 +150,10 @@ case1,/abs/path/to/project/src/foo.c,"1187,609,486",1,confirmed vulnerable line
 
 - `line_number` 는 쉼표/공백 구분 다 허용합니다.
 - `label` 은 `1`, `true`, `yes`, `vuln`, `vulnerable` 등을 취약으로 인식합니다.
-- `build_targets.csv.workdir`는 절대경로 외에 **CSV 파일 기준 상대경로**도 허용합니다.
-  예: `cases/<project>__<CVE>/<track>/runs/base-run/build_targets.csv` 안에서 `../../repo`
-- `manual_line_truth.csv.file_path`는 절대경로 외에 **source-root 기준 상대경로**도 허용합니다.
-  예: `src/manager.c`
 - 성공 시 대표 출력은
   `artifacts/external-runs/<run-id>/07_dataset_export/Real_Vul_data.csv`,
   `artifacts/external-runs/<run-id>/07_dataset_export/trace_row_manifest.jsonl`
   입니다.
-- 외부 run에서 후속 데이터 읽기 기준 파일은 보통 아래 둘입니다.
-  - `07_dataset_export/Real_Vul_data.csv`: test-only dataset CSV
-  - `07_dataset_export/trace_row_manifest.jsonl`: dataset row ↔ trace/source line 매핑
 
 ## 파이프라인 개요
 
@@ -314,20 +205,6 @@ artifacts/
 │   └── infer-YYYY.MM.DD-HH:MM:SS/
 │       ├── CWE.../infer-out/
 │       └── analysis/{result.csv,no_issue_files.txt}
-├── external-runs/
-│   ├── <run-id>/                         # CLI 기본 계약
-│   ├── <CVE-or-project>/<run-id>/        # 현재 자주 쓰는 운영 관례
-│   │   ├── 03_infer-results/
-│   │   ├── 03_signatures/
-│   │   ├── 03_infer_summary.json
-│   │   ├── 05b_manual_line_filter/
-│   │   ├── 06_trace_slices/
-│   │   └── 07_dataset_export/
-│   │       ├── Real_Vul_data.csv
-│   │       ├── normalized_slices/
-│   │       ├── summary.json
-│   │       └── trace_row_manifest.jsonl
-│   └── archive/                          # 운영상 보관용 관례
 ├── signatures/
 │   └── infer-YYYY.MM.DD-HH:MM:SS/
 │       └── signature-YYYY.MM.DD-HH:MM:SS/
@@ -381,6 +258,12 @@ python tools/run_linevul.py \
   --run-dir artifacts/pipeline-runs/run-2026.03.17-11:28:48 \
   --dry-run
 
+# Extended RealVul 테스트셋과 fine-tuned LineVul 모델을 다운로드해
+# fine-tuned test -> raw baseline test -> combined t-SNE 까지 실행
+python tools/run_linevul.py \
+  --overwrite \
+  --extended-realvul
+
 # 최신 pipeline run의 Real_Vul_data.csv 를 VP-Bench pdbert 컨테이너로 넘겨
 # primary dataset 에 대해 prepare -> train -> test -> analyze 실행
 # vuln_patch/Real_Vul_data.csv 가 있으면 --raw-model-dir 가 필요하고,
@@ -399,6 +282,12 @@ python tools/run_pdbert.py \
   --run-dir artifacts/pipeline-runs/run-2026.03.18-04:05:48 \
   --raw-model-dir /home/sojeon/Desktop/VP-Bench/downloads/PDBERT/data/models/pdbert-base \
   --dry-run
+
+# Extended RealVul 테스트셋과 fine-tuned PDBERT 모델을 다운로드해
+# fine-tuned test/analyze + raw baseline test/analyze + combined t-SNE 까지 실행
+python tools/run_pdbert.py \
+  --overwrite \
+  --extended-realvul
 
 # 두 pipeline run 또는 dataset export 디렉터리 비교
 python tools/compare-artifacts.py \
@@ -432,6 +321,9 @@ python tools/compare-artifacts.py \
   현재 Stage 07 CSV 는 `processed_func`, `vulnerable_line_numbers`, `dataset_type` 기준으로는
   바로 사용할 수 있지만, 원본 `linevul_main.py` 가 기대하는
   `flaw_line`, `flaw_line_index` 컬럼은 포함하지 않습니다.
+- `--extended-realvul` 을 사용하면 pipeline run 입력 대신
+  VP-Bench release의 Extended RealVul 테스트 CSV와 LineVul fine-tuned 모델을 내려받아
+  fine-tuned test, raw baseline test, combined t-SNE 생성만 수행합니다.
 
 ## PDBERT 연동 메모
 
@@ -469,6 +361,11 @@ python tools/compare-artifacts.py \
     `downloads/PDBERT/data/models/extrinsic/vul_detect/juliet-playground/<run-id>/vuln_patch/raw_model_eval/`
 - feature export / t-SNE 산출물은 primary analyze, vuln_patch analyze,
   raw baseline analyze 에서 각각 생성됩니다.
+- `--extended-realvul` 을 사용하면 pipeline run 입력 대신
+  VP-Bench release의 Extended RealVul 테스트 CSV와 PDBERT fine-tuned 모델을 내려받아
+  fine-tuned test/analyze, raw baseline test/analyze, combined t-SNE 생성만 수행합니다.
+  이때 기본 `--raw-model-dir` 는
+  `../VP-Bench/downloads/PDBERT/data/models/pdbert-base` 입니다.
 
 ## 메모
 
