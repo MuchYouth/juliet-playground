@@ -73,7 +73,10 @@ def load_build_targets_csv(path: Path) -> list[BuildTarget]:
     if not path.exists():
         raise FileNotFoundError(f'build_targets.csv not found: {path}')
 
-    with path.open('r', encoding='utf-8', newline='') as f:
+    csv_path = path.resolve()
+    csv_parent = csv_path.parent
+
+    with csv_path.open('r', encoding='utf-8', newline='') as f:
         reader = csv.DictReader(f)
         fieldnames = set(reader.fieldnames or [])
         required = {'testcase_key', 'workdir', 'build_command'}
@@ -88,10 +91,13 @@ def load_build_targets_csv(path: Path) -> list[BuildTarget]:
             workdir_raw = str(row.get('workdir') or '').strip()
             build_command = str(row.get('build_command') or '').strip()
             if not testcase_key or not workdir_raw or not build_command:
-                raise ValueError(f'Incomplete build target at line {lineno} in {path}')
+                raise ValueError(f'Incomplete build target at line {lineno} in {csv_path}')
             if testcase_key in seen_keys:
                 raise ValueError(f'Duplicate testcase_key in build_targets.csv: {testcase_key}')
-            workdir = Path(workdir_raw).resolve()
+            workdir = Path(workdir_raw)
+            if not workdir.is_absolute():
+                workdir = csv_parent / workdir
+            workdir = workdir.resolve()
             targets.append(
                 BuildTarget(
                     testcase_key=testcase_key,
@@ -102,7 +108,7 @@ def load_build_targets_csv(path: Path) -> list[BuildTarget]:
             seen_keys.add(testcase_key)
 
     if not targets:
-        raise ValueError(f'build_targets.csv is empty: {path}')
+        raise ValueError(f'build_targets.csv is empty: {csv_path}')
     return targets
 
 

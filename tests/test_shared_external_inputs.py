@@ -55,3 +55,31 @@ def test_load_build_targets_csv_requires_unique_testcase_keys(tmp_path):
         assert 'Duplicate testcase_key' in str(exc)
     else:
         raise AssertionError('Expected duplicate testcase_key validation to fail')
+
+
+def test_load_build_targets_csv_resolves_relative_workdir_from_real_csv_path(tmp_path):
+    module = load_module_from_path(
+        'test_shared_external_inputs_relative_workdir',
+        REPO_ROOT / 'tools/shared/external_inputs.py',
+    )
+
+    case_dir = tmp_path / 'cases' / 'CVE-2099-0001' / 'vulnerable'
+    repo_dir = case_dir / 'repo'
+    repo_dir.mkdir(parents=True, exist_ok=True)
+
+    base_run_dir = case_dir / 'runs' / 'base-run'
+    base_run_dir.mkdir(parents=True, exist_ok=True)
+    base_csv = base_run_dir / 'build_targets.csv'
+    with base_csv.open('w', encoding='utf-8', newline='') as f:
+        writer = csv.writer(f)
+        writer.writerow(['testcase_key', 'workdir', 'build_command'])
+        writer.writerow(['demo', '../../repo', 'make -j1'])
+
+    run_dir = case_dir / 'runs' / 'run-001'
+    run_dir.mkdir(parents=True, exist_ok=True)
+    (run_dir / 'build_targets.csv').symlink_to('../base-run/build_targets.csv')
+
+    targets = module.load_build_targets_csv(run_dir / 'build_targets.csv')
+
+    assert len(targets) == 1
+    assert targets[0].workdir == repo_dir.resolve()
