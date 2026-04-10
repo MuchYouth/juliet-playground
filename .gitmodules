@@ -5,3 +5,10 @@
 [submodule "cases/shadowsocks-libev__CVE-2017-15924/patched/repo"]
 	path = cases/shadowsocks-libev__CVE-2017-15924/patched/repo
 	url = https://github.com/shadowsocks/shadowsocks-libev
+[submodule "cases/spice-vdagent__CVE-2017-15108/vulnerable/repo"]
+	path = cases/spice-vdagent__CVE-2017-15108/vulnerable/repo
+	url = https://gitlab.freedesktop.org/spice/linux/vd_agent
+	ignore = dirty
+[submodule "cases/spice-vdagent__CVE-2017-15108/patched/repo"]
+	path = cases/spice-vdagent__CVE-2017-15108/patched/repo
+	url = https://gitlab.freedesktop.org/spice/linux/vd_agent
