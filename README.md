@@ -155,6 +155,29 @@ case1,/abs/path/to/project/src/foo.c,"1187,609,486",1,confirmed vulnerable line
   `artifacts/external-runs/<run-id>/07_dataset_export/trace_row_manifest.jsonl`
   입니다.
 
+### 4) case-managed external run 실행
+
+`cases/<project>__<CVE>/<track>/` 구조를 쓰는 case-managed workflow에서는
+`tools/run_case.py`가 `runs/<run>/` bootstrap과 실행을 함께 담당합니다.
+
+```bash
+source .venv/bin/activate
+
+python tools/run_case.py \
+  --case cases/demo-project__CVE-2099-0001 \
+  --track vulnerable \
+  --run run-001
+```
+
+- `--run`은 명시적으로 넘깁니다. 예: `run-001`
+- `runs/<run>/`가 없으면 자동 생성합니다.
+- `runs/<run>/build_targets.csv`, `manual_line_truth.csv`,
+  `pulse-taint-config.json`이 없으면 `runs/base-run/`에서 **copy**해 채웁니다.
+- `--build-targets`, `--manual-line-truth`, `--pulse-taint-config`를 주면
+  해당 파일을 **이번 실행에만 직접 사용**하고 `runs/<run>/`에는 별도 링크/복사를 남기지 않습니다.
+- 실제 파이프라인 산출물은 `runs/<run>/outputs/` 아래에 직접 저장됩니다.
+- 실행이 중간에 실패해도 partial output은 `runs/<run>/outputs/` 아래에 남습니다.
+
 ## 파이프라인 개요
 
 `tools/run_pipeline.py full`은 아래 순서로 실행됩니다.

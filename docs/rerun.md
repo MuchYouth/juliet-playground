@@ -40,6 +40,21 @@ python tools/compare-artifacts.py \
   artifacts/pipeline-runs/run-after/07_dataset_export
 ```
 
+### 3) case-managed external run bootstrap + 실행
+
+```bash
+python tools/run_case.py \
+  --case cases/demo-project__CVE-2099-0001 \
+  --track vulnerable \
+  --run run-001
+```
+
+- `runs/run-001/`가 없으면 자동 생성합니다.
+- `runs/run-001/`의 입력 파일이 비어 있으면 `runs/base-run/`에서 copy해 채웁니다.
+- `--build-targets`, `--manual-line-truth`, `--pulse-taint-config`는
+  case 디렉터리를 바꾸지 않는 일회성 override로 사용합니다.
+- 실제 산출물과 partial output은 항상 `runs/run-001/outputs/` 아래에 직접 저장됩니다.
+
 ## 운영 메모
 
 ### Case-managed final trace 운영 규칙
