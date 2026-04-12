@@ -22,9 +22,6 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument('--track', type=str, choices=sorted(TRACK_NAMES), required=True)
     parser.add_argument('--run', type=str, required=True)
     parser.add_argument('--project-name', type=str, default=None)
-    parser.add_argument('--build-targets', type=Path, default=None)
-    parser.add_argument('--manual-line-truth', type=Path, default=None)
-    parser.add_argument('--pulse-taint-config', type=Path, default=None)
     parser.add_argument(
         '--artifact-root',
         type=Path,
@@ -42,12 +39,7 @@ def run_case(args: argparse.Namespace) -> int:
         track=args.track,
         run_id=args.run,
     )
-    input_paths = prepare_case_run_inputs(
-        paths,
-        build_targets_csv=args.build_targets,
-        manual_line_truth_csv=args.manual_line_truth,
-        pulse_taint_config=args.pulse_taint_config,
-    )
+    input_paths = prepare_case_run_inputs(paths)
 
     project_name = args.project_name or infer_project_name_from_repo(paths.repo_dir)
     pipeline_args = argparse.Namespace(

@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
 from tests.helpers import REPO_ROOT, load_module_from_path, run_module_main, write_text
 
 
@@ -9,7 +11,7 @@ def _make_case_layout(
     tmp_path: Path,
     *,
     create_run_dir: bool = True,
-    include_base_pulse_taint_config: bool = False,
+    include_inputs_pulse_taint_config: bool = False,
 ) -> Path:
     case_dir = tmp_path / 'cases' / 'demo-project__CVE-2099-0001'
     vulnerable_dir = case_dir / 'vulnerable'
@@ -20,33 +22,33 @@ def _make_case_layout(
         '[remote "origin"]\n\turl = https://github.com/example/demo-project.git\n',
     )
 
-    base_run_dir = vulnerable_dir / 'runs' / 'base-run'
+    inputs_dir = vulnerable_dir / 'runs' / 'inputs'
     write_text(
-        base_run_dir / 'build_targets.csv',
+        inputs_dir / 'build_targets.csv',
         'testcase_key,workdir,build_command\ndemo,../../repo,"make clean && make -j1"\n',
     )
     write_text(
-        base_run_dir / 'manual_line_truth.csv',
+        inputs_dir / 'manual_line_truth.csv',
         'testcase_key,file_path,line_number,label,note\n'
         'demo,src/demo.c,1187,vuln,confirmed vulnerable line\n',
     )
-    if include_base_pulse_taint_config:
-        write_text(base_run_dir / 'pulse-taint-config.json', '{"base": true}\n')
+    if include_inputs_pulse_taint_config:
+        write_text(inputs_dir / 'pulse-taint-config.json', '{"base": true}\n')
 
     if create_run_dir:
         run_dir = vulnerable_dir / 'runs' / 'run-001'
         run_dir.mkdir(parents=True, exist_ok=True)
-        (run_dir / 'build_targets.csv').symlink_to('../base-run/build_targets.csv')
-        (run_dir / 'manual_line_truth.csv').symlink_to('../base-run/manual_line_truth.csv')
+        (run_dir / 'build_targets.csv').symlink_to('../inputs/build_targets.csv')
+        write_text(run_dir / 'manual_line_truth.csv', 'stale manual truth\n')
         write_text(run_dir / 'pulse-taint-config.json', '{}\n')
     return case_dir
 
 
-def test_run_case_executes_external_pipeline_and_writes_outputs_under_case_run(
+def test_run_case_overwrites_existing_run_inputs_from_canonical_inputs(
     monkeypatch, tmp_path, capsys
 ):
     module = load_module_from_path('test_run_case', REPO_ROOT / 'tools/run_case.py')
-    case_dir = _make_case_layout(tmp_path)
+    case_dir = _make_case_layout(tmp_path, include_inputs_pulse_taint_config=True)
     expected_outputs_dir = case_dir / 'vulnerable' / 'runs' / 'run-001' / 'outputs'
 
     calls: list[dict[str, object]] = []
@@ -107,6 +109,17 @@ def test_run_case_executes_external_pipeline_and_writes_outputs_under_case_run(
         }
     ]
 
+    run_dir = case_dir / 'vulnerable' / 'runs' / 'run-001'
+    assert (run_dir / 'build_targets.csv').read_text(encoding='utf-8') == (
+        case_dir / 'vulnerable' / 'runs' / 'inputs' / 'build_targets.csv'
+    ).read_text(encoding='utf-8')
+    assert not (run_dir / 'build_targets.csv').is_symlink()
+    assert (run_dir / 'manual_line_truth.csv').read_text(encoding='utf-8') == (
+        case_dir / 'vulnerable' / 'runs' / 'inputs' / 'manual_line_truth.csv'
+    ).read_text(encoding='utf-8')
+    assert not (run_dir / 'manual_line_truth.csv').is_symlink()
+    assert (run_dir / 'pulse-taint-config.json').read_text(encoding='utf-8') == '{"base": true}\n'
+
     assert expected_outputs_dir.exists()
     assert expected_outputs_dir.is_dir()
     assert not expected_outputs_dir.is_symlink()
@@ -115,12 +128,12 @@ def test_run_case_executes_external_pipeline_and_writes_outputs_under_case_run(
     assert 'Case run completed: demo-project__CVE-2099-0001/vulnerable/run-001' in captured.out
 
 
-def test_run_case_bootstraps_missing_run_dir_from_base_run(monkeypatch, tmp_path):
+def test_run_case_bootstraps_missing_run_dir_from_inputs(monkeypatch, tmp_path):
     module = load_module_from_path('test_run_case_bootstrap', REPO_ROOT / 'tools/run_case.py')
     case_dir = _make_case_layout(
         tmp_path,
         create_run_dir=False,
-        include_base_pulse_taint_config=True,
+        include_inputs_pulse_taint_config=True,
     )
 
     calls: list[dict[str, object]] = []
@@ -165,13 +178,13 @@ def test_run_case_bootstraps_missing_run_dir_from_base_run(monkeypatch, tmp_path
     assert build_targets.exists()
     assert not build_targets.is_symlink()
     assert build_targets.read_text(encoding='utf-8') == (
-        case_dir / 'vulnerable' / 'runs' / 'base-run' / 'build_targets.csv'
+        case_dir / 'vulnerable' / 'runs' / 'inputs' / 'build_targets.csv'
     ).read_text(encoding='utf-8')
 
     assert manual_line_truth.exists()
     assert not manual_line_truth.is_symlink()
     assert manual_line_truth.read_text(encoding='utf-8') == (
-        case_dir / 'vulnerable' / 'runs' / 'base-run' / 'manual_line_truth.csv'
+        case_dir / 'vulnerable' / 'runs' / 'inputs' / 'manual_line_truth.csv'
     ).read_text(encoding='utf-8')
 
     assert pulse_taint_config.exists()
@@ -191,73 +204,33 @@ def test_run_case_bootstraps_missing_run_dir_from_base_run(monkeypatch, tmp_path
     assert not (run_dir / 'outputs').is_symlink()
 
 
-def test_run_case_uses_override_inputs_without_materializing_them(monkeypatch, tmp_path):
-    module = load_module_from_path('test_run_case_overrides', REPO_ROOT / 'tools/run_case.py')
+def test_run_case_removed_input_override_flags_are_rejected(tmp_path):
+    module = load_module_from_path('test_run_case_removed_flags', REPO_ROOT / 'tools/run_case.py')
     case_dir = _make_case_layout(
         tmp_path,
         create_run_dir=False,
-        include_base_pulse_taint_config=True,
-    )
-    override_build_targets = tmp_path / 'inputs' / 'custom-build-targets.csv'
-    override_pulse_taint_config = tmp_path / 'inputs' / 'custom-pulse-taint-config.json'
-    write_text(
-        override_build_targets,
-        'testcase_key,workdir,build_command\ndemo,/tmp,"make custom"\n',
-    )
-    write_text(override_pulse_taint_config, '{"override": true}\n')
-
-    calls: list[dict[str, object]] = []
-
-    def fake_run_external_trace_pipeline(args):
-        calls.append(
-            {
-                'build_targets': args.build_targets,
-                'manual_line_truth': args.manual_line_truth,
-                'pulse_taint_config': args.pulse_taint_config,
-            }
-        )
-        (args.output_root / args.run_id).mkdir(parents=True, exist_ok=True)
-        return 0
-
-    monkeypatch.setattr(
-        module._run_external_trace_pipeline,
-        'run_external_trace_pipeline',
-        fake_run_external_trace_pipeline,
+        include_inputs_pulse_taint_config=True,
     )
 
-    result = run_module_main(
-        module,
-        [
-            '--case',
-            str(case_dir),
-            '--track',
-            'vulnerable',
-            '--run',
-            'run-001',
-            '--build-targets',
-            str(override_build_targets),
-            '--pulse-taint-config',
-            str(override_pulse_taint_config),
-        ],
-    )
-
-    assert result == 0
-    run_dir = case_dir / 'vulnerable' / 'runs' / 'run-001'
-
-    assert not (run_dir / 'build_targets.csv').exists()
-    assert not (run_dir / 'pulse-taint-config.json').exists()
-    assert (run_dir / 'manual_line_truth.csv').exists()
-    assert not (run_dir / 'manual_line_truth.csv').is_symlink()
-
-    assert calls == [
-        {
-            'build_targets': override_build_targets.resolve(),
-            'manual_line_truth': run_dir / 'manual_line_truth.csv',
-            'pulse_taint_config': override_pulse_taint_config.resolve(),
-        }
-    ]
-    assert (run_dir / 'outputs').exists()
-    assert not (run_dir / 'outputs').is_symlink()
+    for option in [
+        '--build-targets',
+        '--manual-line-truth',
+        '--pulse-taint-config',
+    ]:
+        with pytest.raises(SystemExit):
+            run_module_main(
+                module,
+                [
+                    '--case',
+                    str(case_dir),
+                    '--track',
+                    'vulnerable',
+                    '--run',
+                    'run-001',
+                    option,
+                    'dummy',
+                ],
+            )
 
 
 def test_run_case_keeps_partial_outputs_directory_on_failure(monkeypatch, tmp_path):
@@ -265,7 +238,7 @@ def test_run_case_keeps_partial_outputs_directory_on_failure(monkeypatch, tmp_pa
     case_dir = _make_case_layout(
         tmp_path,
         create_run_dir=False,
-        include_base_pulse_taint_config=True,
+        include_inputs_pulse_taint_config=True,
     )
 
     def fake_run_external_trace_pipeline(args):
@@ -298,3 +271,25 @@ def test_run_case_keeps_partial_outputs_directory_on_failure(monkeypatch, tmp_pa
     assert outputs_dir.is_dir()
     assert not outputs_dir.is_symlink()
     assert (outputs_dir / 'partial.txt').read_text(encoding='utf-8') == 'partial\n'
+
+
+def test_run_case_fails_when_canonical_inputs_are_incomplete(tmp_path):
+    module = load_module_from_path(
+        'test_run_case_missing_inputs',
+        REPO_ROOT / 'tools/run_case.py',
+    )
+    case_dir = _make_case_layout(tmp_path, create_run_dir=False)
+
+    result = run_module_main(
+        module,
+        [
+            '--case',
+            str(case_dir),
+            '--track',
+            'vulnerable',
+            '--run',
+            'run-001',
+        ],
+    )
+
+    assert result == 2

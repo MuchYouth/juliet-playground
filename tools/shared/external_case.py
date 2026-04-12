@@ -21,7 +21,7 @@ class CaseRunPaths:
     trace_output_dir: Path
     selected_runs_dir: Path
     runs_dir: Path
-    base_run_dir: Path
+    inputs_dir: Path
     run_dir: Path
     build_targets_csv: Path
     manual_line_truth_csv: Path
@@ -63,7 +63,7 @@ def resolve_case_run_paths(
         trace_output_dir=track_dir / 'trace_output',
         selected_runs_dir=track_dir / 'trace_output' / 'selected_runs',
         runs_dir=runs_dir,
-        base_run_dir=runs_dir / 'base-run',
+        inputs_dir=runs_dir / 'inputs',
         run_dir=run_dir,
         build_targets_csv=run_dir / 'build_targets.csv',
         manual_line_truth_csv=run_dir / 'manual_line_truth.csv',
@@ -77,7 +77,7 @@ def validate_case_layout(paths: CaseRunPaths) -> None:
         'track directory': paths.track_dir,
         'repo directory': paths.repo_dir,
         'runs directory': paths.runs_dir,
-        'base-run directory': paths.base_run_dir,
+        'inputs directory': paths.inputs_dir,
     }
     for label, path in required.items():
         if not path.exists():
@@ -86,32 +86,25 @@ def validate_case_layout(paths: CaseRunPaths) -> None:
 
 def prepare_case_run_inputs(
     paths: CaseRunPaths,
-    *,
-    build_targets_csv: Path | None = None,
-    manual_line_truth_csv: Path | None = None,
-    pulse_taint_config: Path | None = None,
 ) -> CaseRunInputPaths:
     validate_case_layout(paths)
     paths.run_dir.mkdir(parents=True, exist_ok=True)
 
     return CaseRunInputPaths(
-        build_targets_csv=_resolve_case_input_path(
+        build_targets_csv=_copy_case_input_path(
             label='build_targets.csv',
-            override_path=build_targets_csv,
-            run_path=paths.build_targets_csv,
-            base_path=paths.base_run_dir / 'build_targets.csv',
+            source_path=paths.inputs_dir / 'build_targets.csv',
+            destination_path=paths.build_targets_csv,
         ),
-        manual_line_truth_csv=_resolve_case_input_path(
+        manual_line_truth_csv=_copy_case_input_path(
             label='manual_line_truth.csv',
-            override_path=manual_line_truth_csv,
-            run_path=paths.manual_line_truth_csv,
-            base_path=paths.base_run_dir / 'manual_line_truth.csv',
+            source_path=paths.inputs_dir / 'manual_line_truth.csv',
+            destination_path=paths.manual_line_truth_csv,
         ),
-        pulse_taint_config=_resolve_case_input_path(
+        pulse_taint_config=_copy_case_input_path(
             label='pulse-taint-config.json',
-            override_path=pulse_taint_config,
-            run_path=paths.pulse_taint_config,
-            base_path=paths.base_run_dir / 'pulse-taint-config.json',
+            source_path=paths.inputs_dir / 'pulse-taint-config.json',
+            destination_path=paths.pulse_taint_config,
         ),
     )
 
@@ -132,28 +125,21 @@ def infer_project_name_from_repo(repo_dir: Path) -> str:
     return source_root.parent.name or source_root.name
 
 
-def _resolve_case_input_path(
+def _copy_case_input_path(
     *,
     label: str,
-    override_path: Path | None,
-    run_path: Path,
-    base_path: Path,
+    source_path: Path,
+    destination_path: Path,
 ) -> Path:
-    if override_path is not None:
-        resolved_override = override_path.resolve()
-        _require_existing_input_path(label, resolved_override)
-        return resolved_override
-
-    if run_path.exists():
-        _require_existing_input_path(label, run_path)
-        return run_path
-    if run_path.is_symlink():
-        run_path.unlink()
-
-    _require_existing_input_path(label, base_path)
-    run_path.parent.mkdir(parents=True, exist_ok=True)
-    shutil.copy2(base_path, run_path)
-    return run_path
+    resolved_source = source_path.resolve()
+    _require_existing_input_path(label, resolved_source)
+    destination_path.parent.mkdir(parents=True, exist_ok=True)
+    if destination_path.exists() or destination_path.is_symlink():
+        if destination_path.is_dir():
+            raise FileExistsError(f'Expected file for {label}: {destination_path}')
+        destination_path.unlink()
+    shutil.copy2(resolved_source, destination_path)
+    return destination_path
 
 
 def _require_existing_input_path(label: str, path: Path) -> None:
