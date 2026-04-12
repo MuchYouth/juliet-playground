@@ -50,9 +50,8 @@ python tools/run_case.py \
 ```
 
 - `runs/run-001/`가 없으면 자동 생성합니다.
-- `runs/run-001/`의 입력 파일이 비어 있으면 `runs/base-run/`에서 copy해 채웁니다.
-- `--build-targets`, `--manual-line-truth`, `--pulse-taint-config`는
-  case 디렉터리를 바꾸지 않는 일회성 override로 사용합니다.
+- canonical 입력은 `runs/inputs/` 아래에 둡니다.
+- 실행 시마다 `runs/inputs/`의 입력 3개를 `runs/run-001/`로 copy한 뒤 그 복사본으로 실행합니다.
 - 실제 산출물과 partial output은 항상 `runs/run-001/outputs/` 아래에 직접 저장됩니다.
 
 ## 운영 메모

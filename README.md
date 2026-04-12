@@ -171,10 +171,8 @@ python tools/run_case.py \
 
 - `--run`은 명시적으로 넘깁니다. 예: `run-001`
 - `runs/<run>/`가 없으면 자동 생성합니다.
-- `runs/<run>/build_targets.csv`, `manual_line_truth.csv`,
-  `pulse-taint-config.json`이 없으면 `runs/base-run/`에서 **copy**해 채웁니다.
-- `--build-targets`, `--manual-line-truth`, `--pulse-taint-config`를 주면
-  해당 파일을 **이번 실행에만 직접 사용**하고 `runs/<run>/`에는 별도 링크/복사를 남기지 않습니다.
+- canonical 입력은 `runs/inputs/{build_targets.csv,manual_line_truth.csv,pulse-taint-config.json}`입니다.
+- 실행 시마다 `runs/inputs/`의 입력 3개를 `runs/<run>/`로 **copy**해 snapshot을 만들고 그 복사본으로 실행합니다.
 - 실제 파이프라인 산출물은 `runs/<run>/outputs/` 아래에 직접 저장됩니다.
 - 실행이 중간에 실패해도 partial output은 `runs/<run>/outputs/` 아래에 남습니다.
 
