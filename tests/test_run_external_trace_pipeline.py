@@ -255,3 +255,50 @@ def test_run_external_trace_pipeline_overwrite_replaces_existing_run_dir(
 
     captured = capsys.readouterr()
     assert f'External trace pipeline completed: {run_dir}' in captured.out
+
+
+def test_run_external_trace_pipeline_overwrite_replaces_symlinked_run_dir(
+    monkeypatch, tmp_path, capsys
+):
+    module = load_module_from_path(
+        'test_run_external_trace_pipeline_symlink_overwrite',
+        REPO_ROOT / 'tools/run_external_trace_pipeline.py',
+    )
+    inputs = _make_inputs(tmp_path)
+    output_root = tmp_path / 'case-run'
+    output_root.mkdir(parents=True, exist_ok=True)
+    legacy_artifact_dir = tmp_path / 'legacy-artifact-run'
+    write_text(legacy_artifact_dir / 'legacy.txt', 'legacy\n')
+    run_dir = output_root / 'outputs'
+    run_dir.symlink_to(legacy_artifact_dir, target_is_directory=True)
+    calls = _install_stage_fakes(module, monkeypatch, run_dir)
+
+    result = run_module_main(
+        module,
+        [
+            '--source-root',
+            str(inputs['source_root']),
+            '--build-targets',
+            str(inputs['build_targets']),
+            '--manual-line-truth',
+            str(inputs['manual_line_truth']),
+            '--pulse-taint-config',
+            str(inputs['pulse_taint_config']),
+            '--output-root',
+            str(output_root),
+            '--run-id',
+            'outputs',
+            '--overwrite',
+        ],
+    )
+
+    assert result == 0
+    assert calls == ['stage03', 'stage05', 'stage06', 'stage07']
+    assert run_dir.exists()
+    assert run_dir.is_dir()
+    assert not run_dir.is_symlink()
+    assert (run_dir / '07_dataset_export' / 'Real_Vul_data.csv').exists()
+    assert (legacy_artifact_dir / 'legacy.txt').read_text(encoding='utf-8') == 'legacy\n'
+
+    captured = capsys.readouterr()
+    assert f'External trace pipeline completed: {run_dir}' in captured.out

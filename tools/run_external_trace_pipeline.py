@@ -75,7 +75,7 @@ def run_external_trace_pipeline(args: argparse.Namespace) -> int:
     project_name = args.project_name or _default_project_name(source_root)
 
     run_id = args.run_id or f'run-{_now_ts()}'
-    run_dir = (args.output_root.resolve() / run_id).resolve()
+    run_dir = args.output_root.resolve() / run_id
     prepare_output_dir(run_dir, args.overwrite)
     paths = _build_paths(run_dir)
 
