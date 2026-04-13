@@ -23,6 +23,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument('--run', type=str, required=True)
     parser.add_argument('--project-name', type=str, default=None)
     parser.add_argument(
+        '--infer-jobs',
+        type=int,
+        default=1,
+        help='Number of parallel jobs to pass to `infer run -j`.',
+    )
+    parser.add_argument(
         '--artifact-root',
         type=Path,
         default=None,
@@ -50,6 +56,7 @@ def run_case(args: argparse.Namespace) -> int:
         output_root=paths.run_dir,
         run_id='outputs',
         project_name=project_name,
+        infer_jobs=args.infer_jobs,
         overwrite=args.overwrite,
     )
     result = _run_external_trace_pipeline.run_external_trace_pipeline(pipeline_args)

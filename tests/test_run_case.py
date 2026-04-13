@@ -63,6 +63,7 @@ def test_run_case_overwrites_existing_run_inputs_from_canonical_inputs(
                 'output_root': args.output_root,
                 'run_id': args.run_id,
                 'project_name': args.project_name,
+                'infer_jobs': args.infer_jobs,
                 'overwrite': args.overwrite,
             }
         )
@@ -105,6 +106,7 @@ def test_run_case_overwrites_existing_run_inputs_from_canonical_inputs(
             'output_root': case_dir / 'vulnerable' / 'runs' / 'run-001',
             'run_id': 'outputs',
             'project_name': 'demo-project',
+            'infer_jobs': 1,
             'overwrite': False,
         }
     ]
@@ -146,6 +148,7 @@ def test_run_case_bootstraps_missing_run_dir_from_inputs(monkeypatch, tmp_path):
                 'pulse_taint_config': args.pulse_taint_config,
                 'output_root': args.output_root,
                 'run_id': args.run_id,
+                'infer_jobs': args.infer_jobs,
             }
         )
         (args.output_root / args.run_id).mkdir(parents=True, exist_ok=True)
@@ -198,6 +201,7 @@ def test_run_case_bootstraps_missing_run_dir_from_inputs(monkeypatch, tmp_path):
             'pulse_taint_config': pulse_taint_config,
             'output_root': run_dir,
             'run_id': 'outputs',
+            'infer_jobs': 1,
         }
     ]
     assert (run_dir / 'outputs').exists()
@@ -271,6 +275,45 @@ def test_run_case_keeps_partial_outputs_directory_on_failure(monkeypatch, tmp_pa
     assert outputs_dir.is_dir()
     assert not outputs_dir.is_symlink()
     assert (outputs_dir / 'partial.txt').read_text(encoding='utf-8') == 'partial\n'
+
+
+def test_run_case_passes_custom_infer_jobs(monkeypatch, tmp_path):
+    module = load_module_from_path('test_run_case_custom_jobs', REPO_ROOT / 'tools/run_case.py')
+    case_dir = _make_case_layout(
+        tmp_path,
+        create_run_dir=False,
+        include_inputs_pulse_taint_config=True,
+    )
+
+    calls: list[dict[str, object]] = []
+
+    def fake_run_external_trace_pipeline(args):
+        calls.append({'infer_jobs': args.infer_jobs})
+        (args.output_root / args.run_id).mkdir(parents=True, exist_ok=True)
+        return 0
+
+    monkeypatch.setattr(
+        module._run_external_trace_pipeline,
+        'run_external_trace_pipeline',
+        fake_run_external_trace_pipeline,
+    )
+
+    result = run_module_main(
+        module,
+        [
+            '--case',
+            str(case_dir),
+            '--track',
+            'vulnerable',
+            '--run',
+            'run-001',
+            '--infer-jobs',
+            '8',
+        ],
+    )
+
+    assert result == 0
+    assert calls == [{'infer_jobs': 8}]
 
 
 def test_run_case_fails_when_canonical_inputs_are_incomplete(tmp_path):

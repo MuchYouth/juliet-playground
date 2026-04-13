@@ -166,10 +166,14 @@ source .venv/bin/activate
 python tools/run_case.py \
   --case cases/demo-project__CVE-2099-0001 \
   --track vulnerable \
-  --run run-001
+  --run run-001 \
+  --infer-jobs 8
 ```
 
 - `--run`은 명시적으로 넘깁니다. 예: `run-001`
+- `--infer-jobs`는 `infer run -j N`의 N을 제어합니다. 기본값은 `1`입니다.
+- `--infer-jobs`는 Infer 내부 병렬도만 바꾸며, `build_targets.csv` 안의 build command
+  자체 병렬도(예: `make -jN`)는 변경하지 않습니다.
 - `runs/<run>/`가 없으면 자동 생성합니다.
 - canonical 입력은 `runs/inputs/{build_targets.csv,manual_line_truth.csv,pulse-taint-config.json}`입니다.
 - 실행 시마다 `runs/inputs/`의 입력 3개를 `runs/<run>/`로 **copy**해 snapshot을 만들고 그 복사본으로 실행합니다.
