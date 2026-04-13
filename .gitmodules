@@ -8,3 +8,6 @@
 [submodule "cases/patch__CVE-2019-13638/vulnerable/repo"]
 	path = cases/patch__CVE-2019-13638/vulnerable/repo
 	url = https://git.savannah.gnu.org/git/patch.git
+[submodule "cases/patch__CVE-2019-13638/patched/repo"]
+	path = cases/patch__CVE-2019-13638/patched/repo
+	url = https://github.com/mirror/patch
