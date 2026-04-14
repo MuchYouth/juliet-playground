@@ -18,6 +18,18 @@
 [submodule "cases/patch__CVE-2019-13638/patched/repo"]
 	path = cases/patch__CVE-2019-13638/patched/repo
 	url = https://github.com/mirror/patch
+[submodule "cases/openjpeg__CVE-2019-12973/vulnerable/repo"]
+	path = cases/openjpeg__CVE-2019-12973/vulnerable/repo
+	url = https://github.com/uclouvain/openjpeg.git
+[submodule "cases/openjpeg__CVE-2019-12973/patched/repo"]
+	path = cases/openjpeg__CVE-2019-12973/patched/repo
+	url = https://github.com/uclouvain/openjpeg.git
+[submodule "cases/php-src__CVE-2017-11142/vulnerable/repo"]
+	path = cases/php-src__CVE-2017-11142/vulnerable/repo
+	url = https://github.com/php/php-src.git
+[submodule "cases/php-src__CVE-2017-11142/patched/repo"]
+	path = cases/php-src__CVE-2017-11142/patched/repo
+	url = https://github.com/php/php-src.git
 [submodule "cases/php__CVE-2015-8617/vulnerable/repo"]
 	path = cases/php__CVE-2015-8617/vulnerable/repo
 	url = https://github.com/php/php-src
