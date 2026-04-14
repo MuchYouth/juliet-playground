@@ -18,3 +18,9 @@
 [submodule "cases/patch__CVE-2019-13638/patched/repo"]
 	path = cases/patch__CVE-2019-13638/patched/repo
 	url = https://github.com/mirror/patch
+[submodule "cases/php__CVE-2015-8617/vulnerable/repo"]
+	path = cases/php__CVE-2015-8617/vulnerable/repo
+	url = https://github.com/php/php-src
+[submodule "cases/php__CVE-2015-8617/patched/repo"]
+	path = cases/php__CVE-2015-8617/patched/repo
+	url = https://github.com/php/php-src
