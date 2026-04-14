@@ -211,3 +211,5 @@ __marimo__/
 # User-defined ignore patterns
 artifacts/
 experiments/*/outputs/
+*.db
+cases/*/runs/
