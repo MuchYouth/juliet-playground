@@ -40,3 +40,19 @@ zend_throw_error(exception_ce, message);
 ZEND_API ZEND_COLD void zend_throw_error(zend_class_entry *exception_ce, const char *format, ...)
 zend_vspprintf(&message, 0, format, va);
 "
+5,5,1,1,vd_agent,,,test,"
+udscs_do_read(&conn);
+udscs_read_complete(connp);
+conn->read_callback(connp, &conn->header, conn->data.buf);
+vdagent_file_xfers_data(agent->xfers, (VDAgentFileXferDataMessage *)data);
+snprintf(buf, PATH_MAX, "xdg-open '%s'&", xfers->save_dir);
+status = system(buf);
+"
+6,6,0,,vd_agent,,,test,"
+udscs_do_read(&conn);
+udscs_read_complete(connp);
+conn->read_callback(connp, &conn->header, conn->data.buf);
+vdagent_file_xfers_data(agent->xfers, (VDAgentFileXferDataMessage *)data);
+gchar *argv[] = { "xdg-open", xfers->save_dir, NULL };
+if (!g_spawn_async(NULL, argv, NULL, G_SPAWN_SEARCH_PATH, NULL, NULL, NULL, &error))
+"
