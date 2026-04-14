@@ -40,3 +40,11 @@ zend_throw_error(exception_ce, message);
 ZEND_API ZEND_COLD void zend_throw_error(zend_class_entry *exception_ce, const char *format, ...)
 zend_vspprintf(&message, 0, format, va);
 "
+5,5,0,,php-src,,,test,"
+zend_throw_or_error(fetch_type, NULL, ""Class '%s' not found"", ZSTR_VAL(class_name));
+static void zend_throw_or_error(int fetch_type, zend_class_entry *exception_ce, const char *format, ...)
+zend_vspprintf(&message, 0, format, va);
+zend_throw_error(exception_ce, ""%s"", message);
+ZEND_API ZEND_COLD void zend_throw_error(zend_class_entry *exception_ce, const char *format, ...)
+zend_vspprintf(&message, 0, format, va);
+"
