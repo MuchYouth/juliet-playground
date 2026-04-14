@@ -40,7 +40,7 @@ zend_throw_error(exception_ce, message);
 ZEND_API ZEND_COLD void zend_throw_error(zend_class_entry *exception_ce, const char *format, ...)
 zend_vspprintf(&message, 0, format, va);
 "
-5,5,1,1,vd_agent,,,test,"
+5,5,1,"1,2,3,4,5,6",vd_agent,,,test,"
 udscs_do_read(&conn);
 udscs_read_complete(connp);
 conn->read_callback(connp, &conn->header, conn->data.buf);
