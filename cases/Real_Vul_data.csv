@@ -1,0 +1,42 @@
+file_name,unique_id,target,vulnerable_line_numbers,project,source_signature_path,commit_hash,dataset_type,processed_func
+1,1,1,"1,2,3",shadowsocks-libev,,,test,"r   = recvfrom(manager->fd, buf, BUF_SIZE, 0, (struct sockaddr *)&claddr, &len);
+        struct server *server = get_server(buf, r);
+  int ret = add_server(manager, server);
+   char *cmd = construct_command_line(manager, server);
+    snprintf(cmd, BUF_SIZE,
+             '%s -m %s --manager-address %s -f %s/.shadowsocks_%s.pid -c %s/.shadowsocks_%s.conf`',
+             executable, method, manager->manager_address,
+             working_dir, server->port, working_dir, server->port);
+    if (system(cmd) == -1) {
+"
+2,2,1,"1,2,3",patch,,,test,"outfile = xstrdup (optarg);
+outname = outfile;
+outfd = make_tempfile (&TMPOUTNAME, 'o', outname, O_WRONLY | binary_transput, instat.st_mode & S_IRWXUGO);
+int make_tempfile (char const **name, char letter, char const *real_name, int flags, mode_t mode)
+dirname = dir_name (real_name);
+sprintf (template, '%s/%s.%cXXXXXX', dirname, basename, letter);
+*name = template;
+do_ed_script (inname, TMPOUTNAME, &TMPOUTNAME_needs_removal, outstate.ofp);
+void do_ed_script (char const *inname, char const *outname, bool *outname_needs_removal, FILE *ofp)
+sprintf (buf, '%s %s%s', editor_program, verbosity == VERBOSE ? '' : '- ', outname);
+execl ('/bin/sh', 'sh', '-c', buf, (char *) 0);
+"
+3,3,0,,patch,,,test,"outfile = xstrdup (optarg);
+outname = outfile;
+outfd = make_tempfile (&TMPOUTNAME, 'o', outname, O_WRONLY | binary_transput, instat.st_mode & S_IRWXUGO);
+int make_tempfile (char const **name, char letter, char const *real_name, int flags, mode_t mode)
+dirname = dir_name (real_name);
+sprintf (template, '%s/%s.%cXXXXXX', dirname, basename, letter);
+*name = template;
+do_ed_script (inname, TMPOUTNAME, &TMPOUTNAME_needs_removal, outstate.ofp);
+void do_ed_script (char const *inname, char const *outname, bool *outname_needs_removal, FILE *ofp)
+execlp (editor_program, editor_program, '-', outname, (char  *) NULL);
+"
+4,4,1,"1,2,3",php-src,,,test,"
+zend_throw_or_error(fetch_type, NULL, ""Class '%s' not found"", ZSTR_VAL(class_name));
+static void zend_throw_or_error(int fetch_type, zend_class_entry *exception_ce, const char *format, ...)
+zend_vspprintf(&message, 0, format, va);
+zend_throw_error(exception_ce, message);
+ZEND_API ZEND_COLD void zend_throw_error(zend_class_entry *exception_ce, const char *format, ...)
+zend_vspprintf(&message, 0, format, va);
+"
